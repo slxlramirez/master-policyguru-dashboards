@@ -1,0 +1,78 @@
+<dashboard>
+  <label>Analyst - PolicyGuru - SIP Aggregated Data vs PolicyGuru Data</label>
+  <row>
+    <panel>
+      <chart>
+        <search>
+          <query>| dbxquery 
+timeout=1800
+connection="ngp_connection"
+query="
+SELECT 'myjoin' myjoin, 
+       TO_CHAR(to_timestamp(a.analyticstime/1000),'YYYY-MM-DD hh24') as thehour,
+        count(guid) as policyguru_calls
+FROM    master.flowstart a
+WHERE   a.analyticstime &gt;= (extract ('epoch' from date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT'  - interval '7 day')*1000)::bigint AND
+        a.analyticstime  &lt; (extract ('epoch' from date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT'  - interval '0 day')*1000)::bigint AND
+        a.routername LIKE 'sip%'
+GROUP BY TO_CHAR(to_timestamp(a.analyticstime/1000),'YYYY-MM-DD hh24')
+ORDER BY TO_CHAR(to_timestamp(a.analyticstime/1000),'YYYY-MM-DD hh24')
+"
+shortnames=t
+| join type=left
+[
+| dbxquery 
+timeout=1800
+connection="mssv_db"
+query="
+SELECT
+        to_char(analyticstime_t AT TIME ZONE 'GMT','YYYY-MM-DD hh24') as thehour,
+        count(guid) as aggregated_calls
+FROM    pg_fs_fe_cdr a
+WHERE   analyticstime_t &gt;= (date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT' - interval '7 day')
+        AND analyticstime_t  &lt; (date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT')
+GROUP BY to_char(analyticstime_t AT TIME ZONE 'GMT','YYYY-MM-DD hh24')
+ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT','YYYY-MM-DD hh24')
+"
+shortnames=t
+]
+| table thehour policyguru_calls aggregated_calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>
