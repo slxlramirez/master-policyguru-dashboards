@@ -1,0 +1,743 @@
+<form>
+  <label>Analyst - PolicyGuru - Summary - Historical - Compare SIP and ENUM Calls (MSSV Data)</label>
+  <fieldset submitButton="true">
+    <input type="text" token="startDate_token">
+      <label>Start Date (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date</label>
+    </input>
+    <input type="dropdown" token="timeChart_token">
+      <label>Timechart Interval</label>
+      <choice value="1d">by Day</choice>
+      <choice value="1h">by Hour</choice>
+      <choice value="15m">by 15m</choice>
+      <default>1d</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound ENUM vs SIP</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.interval, 
+       a.calls as sip_calls, 
+       b.calls as enum_calls,
+       a.calls-b.calls as diff
+FROM
+(
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+) a LEFT OUTER JOIN
+(
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+) b ON a.interval=b.interval
+" shortnames=t
+| table interval enum_calls sip_calls diff
+| sort 0 interval
+| eval _time=strptime(interval,"%Y-%m-%d %H:%M:%S")
+| timechart span=$timeChart_token$ fixedrange=false sum(enum_calls) as enum sum(sip_calls) as sip sum(diff) as diff</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">diff</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Inbound ENUM vs SIP Stats</title>
+        <search id="inbound_enum_result">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       a.calls as sip_calls, 
+       b.calls as enum_calls,
+       a.calls-b.calls as diff,
+       CASE
+          WHEN b.calls=0 THEN 'NA'
+          ELSE (ROUND((a.calls::numeric-b.calls)/b.calls,3)*100)::varchar
+       END as perc_chg
+FROM
+(
+SELECT 'myjoin' as myjoin,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+) a LEFT OUTER JOIN
+(
+SELECT 'myjoin' as myjoin,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+) b ON a.myjoin::text=b.myjoin::text
+" shortnames=t
+| table enum_calls sip_calls diff perc_chg</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="totalsRow">false</option>
+        <format type="number" field="enum_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="sip_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="diff">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="perc_chg">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="color" field="perc_chg">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Inbound ENUM/SIP MSSV Evaluation</title>
+        <search base="inbound_enum_result">
+          <query>| eval result=case(perc_chg == "NA", "There are NO OUTBOUND enum calls.",perc_chg &gt; 0, "There are ".perc_chg."% MORE SIP calls than ENUM, which is probably good.  It means, in theory, all of the enum calls are in the sip data.", perc_chg &lt; 0, "There are ".perc_chg."% LESS SIP calls than ENUM, which is probably not good.  It means we cannot find every enum call in the sip data.", perc_chg == 0, "There are the EXACT SAME amount of SIP vs ENUM Calls.  This is probably good, but likely a coincidence.  There should probably be more SIP than ENUM.")
+| table result</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Adjusted Inbound ENUM Calls (- 50% of Busy/Failed)</title>
+        <search id="enum_adjusted">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 'myjoin' as myjoin,
+      a.enum_inb_calls,
+      b.sip_bf_calls,
+      a.enum_inb_calls - (b.sip_bf_calls/2) as enum_inb_calls_adjusted
+FROM
+(
+SELECT 'myjoin'::text as myjoin,
+       count(guid) as enum_inb_calls
+FROM   pg_fs_pfd_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+) a LEFT OUTER JOIN 
+(
+SELECT 'myjoin'::text as myjoin,
+       count(guid) as sip_bf_calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND'  AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       calldispositions IN ('FAILED','BUSY')
+) b ON a.myjoin=b.myjoin
+" shortnames=t
+| table myjoin enum_inb_calls sip_bf_calls enum_inb_calls_adjusted
+| join type=left myjoin
+[
+| dbxquery 
+connection="mssv_db" 
+timeout=1800 
+query="
+SELECT 'myjoin'::text as myjoin,
+       count(guid) as sip_inb_calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+" shortnames=t
+]
+| table myjoin enum_inb_calls sip_bf_calls enum_inb_calls_adjusted sip_inb_calls
+| eval diff = enum_inb_calls_adjusted-sip_inb_calls
+| table myjoin enum_inb_calls sip_bf_calls enum_inb_calls_adjusted sip_inb_calls diff
+| eval perc_diff = ROUND(diff/sip_inb_calls,3)
+| table myjoin enum_inb_calls sip_bf_calls enum_inb_calls_adjusted sip_inb_calls diff perc_diff</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="perc_diff">
+          <option name="unit">%</option>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Adjusted Inbound ENUM Evaluation</title>
+        <search base="enum_adjusted">
+          <query>| eval result=case(perc_diff == "NA", "Bollacks.",perc_diff &gt; 0 AND perc_diff &lt; 1, "There are ".perc_diff."% LESS SIP calls than ENUM, which is pretty good.", perc_diff &lt; 0, "There are ".perc_diff."% MORE SIP calls than ENUM, which is interesting.", perc_diff == 0, "There are the EXACT SAME amount of SIP vs ENUM Calls.  This is probably good, but super rare.  Go buy a lottery ticket.")
+| table result</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound SIP Calls by Routername</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       routername,
+       count(guid) as sip_calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
+
+" shortnames=t
+| sort 0 interval
+| eval _time=strptime(interval,"%Y-%m-%d %H:%M:%S")
+| timechart span=$timeChart_token$ fixedrange=false sum(sip_calls) as sip by routername</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Inbound ENUM by Routername</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       routername,
+       count(guid) as sip_calls
+FROM   pg_fs_pfd_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
+
+" shortnames=t
+| sort 0 interval
+| eval _time=strptime(interval,"%Y-%m-%d %H:%M:%S")
+| timechart span=$timeChart_token$ fixedrange=false sum(sip_calls) as sip by routername</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Inbound Sources that Match vs Not Match</title>
+        <search id="inb_source_match">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT CASE
+         WHEN b.calls IS NOT NULL THEN 'SIP MATCH'
+         WHEN b.calls IS NULL THEN 'NO MATCH'
+         ELSE 'OTHER'
+       END as match_class,
+       count(distinct a.sourcenumber) as unique_enum_sources,
+       count(distinct b.sourcenumber) as unique_sip_sources,
+       sum(a.calls) as enum_calls,
+       sum(b.calls) as sip_calls
+FROM
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       sourcenumber &lt;&gt; '' AND
+       sourcenumber IS NOT NULL AND
+       direction='INBOUND'
+GROUP BY sourcenumber
+ORDER BY sourcenumber
+) a LEFT OUTER JOIN
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       direction='INBOUND'
+GROUP BY sourcenumber
+ORDER BY sourcenumber
+) b ON a.sourcenumber=b.sourcenumber
+GROUP BY CASE
+         WHEN b.calls IS NOT NULL THEN 'SIP MATCH'
+         WHEN b.calls IS NULL THEN 'NO MATCH'
+         ELSE 'OTHER'
+       END
+" shortnames=t
+| table match_class unique_enum_sources enum_calls
+| sort -match_class
+| stats sum(eval(if(match_class=="SIP MATCH",unique_enum_sources,0))) as sip_matches sum(eval(if(match_class=="NO MATCH",unique_enum_sources,0))) as no_matches
+| eval perc=ROUND(no_matches/sip_matches,3)*100
+| table sip_matches no_matches perc</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="enum_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="sip_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="perc">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top ENUM Sources</title>
+        <search id="top_enum_sources">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.sourcenumber,
+       a.calls as enum_calls,
+       b.calls as sip_calls
+FROM
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       sourcenumber &lt;&gt; '' AND
+       sourcenumber IS NOT NULL AND
+       direction = 'INBOUND'
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+LIMIT 10
+) a LEFT OUTER JOIN
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       direction = 'INBOUND'
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+) b ON a.sourcenumber=b.sourcenumber
+ORDER BY a.calls DESC
+" shortnames=t
+| table sourcenumber enum_calls  sip_calls
+| eval diff=sip_calls-enum_calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="diff">
+          <colorPalette type="minMidMax" maxColor="#FFFFFF" minColor="#DC4E41"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_inbound_source_between_two_dates?form.sourceNumber_token=$click.value$&amp;form.startTime_token=$startDate_token$&amp;form.endTime_token=$endDate_token$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top ENUM Sources with NO MATCH in SIP</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.sourcenumber,
+       a.calls as enum_calls,
+       b.calls as sip_calls
+FROM
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       sourcenumber &lt;&gt; '' AND
+       sourcenumber IS NOT NULL
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+) a LEFT OUTER JOIN
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+) b ON a.sourcenumber=b.sourcenumber
+WHERE b.calls IS NULL
+ORDER BY a.calls DESC
+LIMIT 10
+" shortnames=t
+| table sourcenumber enum_calls  sip_calls
+| sort -enum_calls
+| eval diff=sip_calls-enum_calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>MSSV Thoughts on Inbound Callers</title>
+        <search base="inb_source_match">
+          <query>| eval result=case(perc &gt; 0, "There are ".perc."% ENUM callers NOT found in SIP, which is probably bad.  It means we are either (a) missing call records in the SIP data and/or (b) the source numbers do not match.", perc &lt; 0, "There are ".perc."% MORE ENUM callers than SIP, which is odd.  I'm not sure what this means...", perc == 0, "There are the EXACT SAME amount of ENUM vs SIP callers.  This is the best case scenario.")
+| table result</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>MSSV Thoughts on Top ENUM Callers</title>
+        <search base="top_enum_sources">
+          <query>| stats stdev(diff) as stddev
+| eval stddev=ROUND(stddev,0)
+| eval result=case(stddev &gt; 0 AND stddev &lt; 100, "The standard deviation of ".stddev." in the difference in calls from the Top Enum Callers ENUM callers is interesting.  It means there is a discrepancy in total calls we can find for any given ENUM inbound sourcenumber in the SIP data, but less than 100 aint bad...", stddev &gt; 100, "The standard deviation of ".stddev." in the difference in calls from the Top Enum Callers ENUM callers is concerning.  It means there is a discrepancy in total calls we can find for any given ENUM inbound sourcenumber in the SIP data.", stddev &lt; 0, "The standard deviation of ".stddev." needs help, Logan.  Why would it be negative?", stddev == 0, "There are the EXACT SAME amount of ENUM vs SIP callers.  This is the best case scenario, but super unlikely.")
+| table result</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Inbound Destination ENUM Matches</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT CASE
+         WHEN b.calls IS NOT NULL THEN 'SIP MATCH'
+         WHEN b.calls IS NULL THEN 'NO MATCH'
+         ELSE 'OTHER'
+       END as match_class,
+       count(distinct a.destinationnumber) as unique_enum_dests,
+       count(distinct b.destinationnumber) as unique_sip_dests,
+       sum(a.calls) as enum_calls,
+       sum(b.calls) as sip_calls
+FROM
+(
+SELECT destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       direction='INBOUND'
+GROUP BY destinationnumber
+ORDER BY destinationnumber
+) a LEFT OUTER JOIN
+(
+SELECT destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       direction='INBOUND'
+GROUP BY destinationnumber
+ORDER BY destinationnumber
+) b ON a.destinationnumber=b.destinationnumber
+GROUP BY CASE
+         WHEN b.calls IS NOT NULL THEN 'SIP MATCH'
+         WHEN b.calls IS NULL THEN 'NO MATCH'
+         ELSE 'OTHER'
+       END
+" shortnames=t
+| table match_class unique_enum_dests enum_calls
+| sort -match_class</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top 10 Destinations ENUM vs SIP</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.destinationnumber,
+       a.calls as enum_calls,
+       b.calls as sip_calls
+FROM
+(
+SELECT destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY destinationnumber
+ORDER BY count(guid) DESC
+LIMIT 10
+) a LEFT OUTER JOIN
+(
+SELECT destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY destinationnumber
+ORDER BY count(guid) DESC
+) b ON a.destinationnumber=b.destinationnumber
+ORDER BY a.calls DESC
+" shortnames=t
+| table destinationnumber enum_calls  sip_calls
+| eval diff=sip_calls-enum_calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="diff">
+          <colorPalette type="minMidMax" maxColor="#FFFFFF" minColor="#DC4E41"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top ENUM Destinations with NO SIP Match</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.destinationnumber,
+       a.calls as enum_calls,
+       b.calls as sip_calls
+FROM
+(
+SELECT destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY destinationnumber
+ORDER BY count(guid) DESC
+) a LEFT OUTER JOIN
+(
+SELECT destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY destinationnumber
+ORDER BY count(guid) DESC
+) b ON a.destinationnumber=b.destinationnumber
+WHERE b.calls IS NULL
+ORDER BY a.calls DESC
+LIMIT 10
+" shortnames=t
+| table destinationnumber enum_calls  sip_calls
+| sort -enum_calls
+| eval diff=sip_calls-enum_calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Outbound ENUM vs SIP</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.interval, 
+       a.calls as sip_calls, 
+       b.calls as enum_calls,
+       a.calls-b.calls as diff
+FROM
+(
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'OUTBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+) a LEFT OUTER JOIN
+(
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  direction = 'OUTBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+) b ON a.interval=b.interval
+" shortnames=t
+| table interval enum_calls sip_calls diff
+| sort 0 interval
+| eval _time=strptime(interval,"%Y-%m-%d %H:%M:%S")
+| timechart span=$timeChart_token$ fixedrange=false sum(enum_calls) as enum sum(sip_calls) as sip sum(diff) as diff</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">diff</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Outbound ENUM vs SIP Stats</title>
+        <search id="outbound_enum_result">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       a.calls as sip_calls, 
+       b.calls as enum_calls,
+       a.calls-b.calls as diff,
+       CASE
+          WHEN b.calls=0 THEN 'NA'
+          ELSE (ROUND((a.calls::numeric-b.calls)/b.calls,3)*100)::varchar
+       END as perc_chg
+       --,
+       --ROUND((a.calls::numeric-b.calls)/b.calls,3)*100 as perc_chg
+FROM
+(
+SELECT 'myjoin' as myjoin,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'OUTBOUND' AND
+       datekey &gt;= '2018-12-01'::date AND
+       datekey  &lt; '2018-12-13'::date
+) a LEFT OUTER JOIN
+(
+SELECT 'myjoin' as myjoin,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  direction = 'OUTBOUND' AND
+       datekey &gt;= '2018-12-01'::date AND
+       datekey  &lt; '2018-12-13'::date
+) b ON a.myjoin::text=b.myjoin::text
+" shortnames=t
+| table enum_calls sip_calls diff perc_chg</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="enum_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="sip_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="diff">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="perc_chg">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="color" field="perc_chg">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Outbound ENUM/SIP MSSV Evaluation</title>
+        <search base="outbound_enum_result">
+          <query>| eval result=case(perc_chg == "NA", "There are NO OUTBOUND enum calls.  So move along.  Nothing to see here.",perc_chg &gt; 0, "There are ".perc_chg."% MORE SIP calls than ENUM, which is probably good.  It means, in theory, all of the enum calls are in the sip data.", perc_chg &lt; 0, "There are ".perc_chg."% LESS SIP calls than ENUM, which is probably not good.  It means we cannot find every enum call in the sip data.", perc_chg == 0, "There are the EXACT SAME amount of SIP vs ENUM Calls.  This is probably good, but likely a coincidence.  There should probably be more SIP than ENUM.")
+| table result</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
