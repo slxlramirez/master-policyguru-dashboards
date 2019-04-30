@@ -1,0 +1,302 @@
+<form>
+  <label>Analyst - PolicyGuru - Summary - Historical - Overall Data Integrity</label>
+  <fieldset submitButton="true">
+    <input type="text" token="startDate_token">
+      <label>Start Date (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date</label>
+    </input>
+    <input type="dropdown" token="timeChart_token">
+      <label>Timechart Interval</label>
+      <choice value="1d">by Day</choice>
+      <choice value="1h">by Hour</choice>
+      <choice value="15m">by 15m</choice>
+      <default>1d</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound ENUM vs SIP</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       direction,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  --direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), direction
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), direction
+" shortnames=t
+| eval _time=strptime(interval,"%Y-%m-%d %H:%M:%S")
+| timechart span=$timeChart_token$ fixedrange=false sum(calls) as calls by direction</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">diff</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Inbound ENUM vs SIP Stats</title>
+        <search id="inbound_enum_result">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       direction,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  --direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY direction
+ORDER BY direction
+" shortnames=t
+| table direction calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="totalsRow">false</option>
+        <format type="number" field="enum_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="sip_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="diff">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="perc_chg">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="color" field="perc_chg">
+          <colorPalette type="minMidMax" maxColor="#DC4E41" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top 10 Inbound Sources</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+LIMIT 10
+" shortnames=t
+| table sourcenumber calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top 10 Inbound Destinations</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY destinationnumber
+ORDER BY count(guid) DESC
+LIMIT 10
+" shortnames=t
+| table destinationnumber calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Top Inbound Sources (not 12 characters)</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       LENGTH(sourcenumber) &lt;&gt; 12 AND
+       lower(sourcenumber) NOT IN ('anonymous')
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+LIMIT 10
+" shortnames=t
+| table sourcenumber calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <chart>
+        <title>Inb Source Number Length</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       CASE 
+         WHEN length(sourcenumber) = 12 THEN '12'
+         WHEN length(sourcenumber) &gt; 12 THEN '12+'
+         WHEN length(sourcenumber) &lt; 12 THEN '12-'
+       END as len_snumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY CASE 
+         WHEN length(sourcenumber) = 12 THEN '12'
+         WHEN length(sourcenumber) &gt; 12 THEN '12+'
+         WHEN length(sourcenumber) &lt; 12 THEN '12-'
+       END
+ORDER BY count(guid) DESC
+" shortnames=t
+| table len_snumber calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Inb Length Number</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       CASE 
+         WHEN length(destinationnumber) = 12 THEN '12'
+         WHEN length(destinationnumber) &gt; 12 THEN '12+'
+         WHEN length(destinationnumber) &lt; 12 THEN '12-'
+       END as len_dnumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY CASE 
+         WHEN length(destinationnumber) = 12 THEN '12'
+         WHEN length(destinationnumber) &gt; 12 THEN '12+'
+         WHEN length(destinationnumber) &lt; 12 THEN '12-'
+       END
+ORDER BY count(guid) DESC
+" shortnames=t
+| table len_dnumber calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Ghost vs Total SIP Calls</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT a.calls as total_calls,
+       b.calls as ghost_calls,
+       ROUND(b.calls::numeric/a.calls,3)*100 as perc_ghost_calls
+FROM
+(
+SELECT   'myjoin'::text as myjoin,
+         count(*) as calls
+FROM     master.flowstart a 
+WHERE    routername LIKE 'sip%' AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endDate_token$') * 1000)::bigint
+) a LEFT OUTER JOIN
+(
+SELECT   'myjoin'::text as myjoin,
+         count(*) as calls
+FROM     master.flowstart a LEFT OUTER JOIN master.flowend b ON a.guid=b.guid
+WHERE    b.duration &lt; 0 AND
+         b.offsetms = 0 AND
+         a.flowtime=b.flowtime AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endDate_token$') * 1000)::bigint AND
+         routername LIKE 'sip%'
+) b ON a.myjoin=b.myjoin
+" shortnames=t
+| table total_calls ghost_calls perc_ghost_calls</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="perc_ghost_calls">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="ghost_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="total_calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="color" field="perc_ghost_calls">
+          <colorPalette type="list">[#65A637,#F7BC38,#ED8440,#D93F3C]</colorPalette>
+          <scale type="threshold">1,5,12</scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>
