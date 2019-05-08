@@ -1,0 +1,352 @@
+<form stylesheet="custom_inputs76.css">
+  <label>PolicyGuru - To From a List - Overview</label>
+  <fieldset submitButton="true" autoRun="false">
+    <input type="text" token="startTime_token">
+      <label>StartTime (timestamp)</label>
+    </input>
+    <input type="text" token="endTime_token">
+      <label>EndTime (timestamp)</label>
+    </input>
+    <input type="dropdown" id="increasewidth101" token="fromList_token">
+      <label>From List (or Any)</label>
+      <fieldForLabel>name</fieldForLabel>
+      <fieldForValue>val</fieldForValue>
+      <search>
+        <query>| dbxquery connection="ngp_connection" query="SELECT b.NAME as NAME, b.NAME as VAL
+FROM master.listinggroup b
+UNION
+SELECT '000_ANY' as NAME, '%' as VAL
+ORDER BY 1" shortnames=t
+| table name val</query>
+        <earliest>0</earliest>
+        <latest></latest>
+      </search>
+      <default>%</default>
+      <initialValue>%</initialValue>
+    </input>
+    <input type="dropdown" id="increasewidth102" token="toList_token">
+      <label>To List (or Any)</label>
+      <default>%</default>
+      <initialValue>%</initialValue>
+      <fieldForLabel>name</fieldForLabel>
+      <fieldForValue>val</fieldForValue>
+      <search>
+        <query>| dbxquery connection="ngp_connection" query="SELECT b.NAME as NAME, b.NAME as VAL
+FROM master.listinggroup b
+UNION
+SELECT '000_ANY' as NAME, '%' as VAL
+ORDER BY 1" shortnames=t
+| table name val</query>
+        <earliest>0</earliest>
+        <latest></latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>Total Calls between  $startTime_token$ to $endTime_token$</title>
+        <search base="cdr">
+          <query>| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <chart>
+        <title>Calls by Day between  $startTime_token$ to $endTime_token$</title>
+        <search>
+          <query>| dbxquery 
+timeout=1800 
+connection="ngp_connection"
+query="
+SELECT   TO_CHAR (TO_TIMESTAMP (a.flowtime/1000), 'YYYY-MM-DD') as dateValue,
+         COUNT(a.guid) as calls
+FROM     master.flowstart a
+WHERE    a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND 
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint AND
+         a.routername LIKE 'enum%'  AND
+         CASE
+       WHEN '$fromList_token$' &lt;&gt; '%' AND 
+      sourcenumber IN 
+       (
+     SELECT  CASE LEFT(a.value, 1)
+          WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+            ELSE a.value
+        END as value
+     FROM      MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+     WHERE    b.name = '$fromList_token$'
+      ) THEN 1
+      WHEN '$fromList_token$' = '%' AND sourcenumber LIKE '%' THEN 1
+       ELSE 0
+        END=1 AND
+          CASE
+       WHEN '$toList_token$' &lt;&gt; '%' AND 
+      destinationnumber IN 
+      (
+     SELECT  CASE LEFT(a.value, 1)
+          WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+            ELSE a.value
+        END as value
+     FROM      MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+     WHERE  b.name = '$toList_token$'
+      ) THEN 1
+      WHEN '$toList_token$' = '%' AND destinationnumber LIKE '%' THEN 1
+       ELSE 0
+       END=1
+GROUP BY TO_CHAR (TO_TIMESTAMP (a.flowtime/1000), 'YYYY-MM-DD')
+ORDER BY TO_CHAR (TO_TIMESTAMP (a.flowtime/1000), 'YYYY-MM-DD')" shortnames=t 
+| table datevalue calls</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Top 10 SourceNumbers between  $startTime_token$ to $endTime_token$</title>
+        <search>
+          <query>| dbxquery 
+timeout=1800 connection="ngp_connection" 
+query="SELECT x.sourcenumber, y.name as groupname, x.calls
+FROM
+(
+SELECT   sourcenumber,
+         COUNT(a.guid) as calls
+FROM     master.flowstart a
+WHERE    a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND 
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint AND
+         a.routername LIKE 'enum%'  AND
+         CASE
+		     WHEN '$fromList_token$' &lt;&gt; '%' AND 
+				  sourcenumber IN 
+			 	  (
+					SELECT 	CASE LEFT(a.value, 1)
+				      WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+	  			      ELSE a.value
+				    END as value
+					FROM 	    MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+					WHERE 	  b.name = '$fromList_token$'
+				  ) THEN 1
+			   WHEN '$fromList_token$' = '%' AND sourcenumber LIKE '%' THEN 1
+			    ELSE 0
+		      END=1 AND
+          CASE
+		     WHEN '$toList_token$' &lt;&gt; '%' AND 
+				  destinationnumber IN 
+				  (
+					SELECT 	CASE LEFT(a.value, 1)
+				      WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+	  			      ELSE a.value
+				    END as value
+					FROM 	    MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+					WHERE 	b.name = '$toList_token$'
+				  ) THEN 1
+			   WHEN '$toList_token$' = '%' AND destinationnumber LIKE '%' THEN 1
+			    ELSE 0
+		     END=1
+GROUP BY sourcenumber
+ORDER BY count(a.guid) DESC
+LIMIT 10
+) x LEFT OUTER JOIN 
+(
+SELECT a.value, 
+       string_agg(a.name,';') as name
+FROM
+(
+SELECT 	CASE LEFT(a.value, 1)
+		 WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+	  	 ELSE a.value
+		 END as value,
+		 b.name
+FROM 	    MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) a
+GROUP BY a.value
+) y ON x.sourcenumber=y.value
+ORDER BY x.calls DESC" shortnames=t 
+| table sourcenumber groupname calls</query>
+          <earliest>0</earliest>
+          <latest></latest>
+        </search>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top 10 Destinations between  $startTime_token$ to $endTime_token$</title>
+        <search>
+          <query>| dbxquery 
+timeout=1800 connection="ngp_connection" 
+query="SELECT   destinationnumber,
+         COUNT(a.guid) as calls
+FROM     master.flowstart a
+WHERE    a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND 
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint AND
+         a.routername LIKE 'enum%'  AND
+         CASE
+		     WHEN '$fromList_token$' &lt;&gt; '%' AND 
+				  sourcenumber IN 
+			 	  (
+					SELECT 	CASE LEFT(a.value, 1)
+				      WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+	  			      ELSE a.value
+				    END as value
+					FROM 	    MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+					WHERE 	  b.name = '$fromList_token$'
+				  ) THEN 1
+			   WHEN '$fromList_token$' = '%' AND sourcenumber LIKE '%' THEN 1
+			    ELSE 0
+		      END=1 AND
+          CASE
+		     WHEN '$toList_token$' &lt;&gt; '%' AND 
+				  destinationnumber IN 
+				  (
+					SELECT 	CASE LEFT(a.value, 1)
+				      WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+	  			      ELSE a.value
+				    END as value
+					FROM 	    MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+					WHERE 	b.name = '$toList_token$'
+				  ) THEN 1
+			   WHEN '$toList_token$' = '%' AND destinationnumber LIKE '%' THEN 1
+			    ELSE 0
+		     END=1
+GROUP BY destinationnumber
+ORDER BY count(a.guid) DESC
+LIMIT 10" shortnames=t 
+| table destinationnumber calls</query>
+          <earliest>0</earliest>
+          <latest></latest>
+        </search>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Numbers on the List that HAVE NOT Called from $startTime_token$ to $endTime_token$</title>
+        <search>
+          <query>| dbxquery 
+timeout=1800 connection="ngp_connection" 
+query="
+SELECT *
+FROM
+(
+SELECT   a.sourcenumber, 
+	     COUNT(a.guid) as calls
+FROM     master.flowstart a 
+WHERE    a.routername LIKE 'enum%'  AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND 
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint AND
+         a.routername LIKE 'enum%'  AND
+         a.sourcenumber IN (
+             SELECT  CASE LEFT(a.value,1)
+                          WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value, '^')+1, (LENGTH(a.value)-STRPOS(a.value, '+')+1))
+				          ELSE a.value
+                     END as value
+              FROM  master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+              WHERE b.name = '$fromList_token$')
+GROUP BY a.sourcenumber
+ORDER BY a.sourcenumber
+) b RIGHT OUTER JOIN
+(
+SELECT  name,
+         CASE LEFT(a.value,1)
+                          WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value, '^')+1, (LENGTH(a.value)-STRPOS(a.value, '+')+1))
+				          ELSE a.value
+                     END as value
+              FROM  master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+              WHERE b.name = '$fromList_token$'
+) a ON a.value=b.sourcenumber
+
+" shortnames=t
+| table name value calls
+| fillnull calls
+| where calls=0</query>
+          <earliest>0</earliest>
+          <latest></latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>To From a List CDR between  $startTime_token$ to $endTime_token$</title>
+        <search id="cdr">
+          <query>| dbxquery 
+timeout=1800 connection="ngp_connection" 
+query="
+SELECT    to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD hh24:mi:ss') as flowtime_t, 
+         a.sourcenumber, 
+	       a.sourceregion, 
+	       a.destinationnumber, 
+	       a.destinationregion,
+         CASE a.direction
+           WHEN 1 THEN 'INBOUND'
+           ELSE 'OUTBOUND'
+         END as direction, 
+	       a.routername,
+	       CASE s.policydisposition
+           WHEN 1 THEN 'ALLOWED'
+           WHEN 2 THEN 'TERMINATED'
+           ELSE s.policydisposition::varchar
+         END as policydisposition, 
+	       s.ruleid
+FROM     master.flowstart a LEFT OUTER JOIN master.policyflowdetails s ON a.guid=s.guid
+WHERE    a.analyticstime &gt;= extract ('epoch' from timestamp '$startTime_token$') * 1000 AND 
+         a.analyticstime  &lt; extract ('epoch' from timestamp '$endTime_token$') * 1000 AND
+         a.routername LIKE 'enum%'  AND
+         CASE
+		     WHEN '$fromList_token$' &lt;&gt; '%' AND 
+				  sourcenumber IN 
+			 	  (
+					SELECT 	CASE LEFT(a.value, 1)
+				      WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+	  			      ELSE a.value
+				    END as value
+					FROM 	    MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+					WHERE 	  b.name = '$fromList_token$'
+				  ) THEN 1
+			   WHEN '$fromList_token$' = '%' AND sourcenumber LIKE '%' THEN 1
+			    ELSE 0
+		      END=1 AND
+          CASE
+		     WHEN '$toList_token$' &lt;&gt; '%' AND 
+				  destinationnumber IN 
+				  (
+					SELECT 	CASE LEFT(a.value, 1)
+				      WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+	  			      ELSE a.value
+				    END as value
+					FROM 	    MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+					WHERE 	b.name = '$toList_token$'
+				  ) THEN 1
+			   WHEN '$toList_token$' = '%' AND destinationnumber LIKE '%' THEN 1
+			    ELSE 0
+		     END=1
+ORDER BY to_timestamp(a.flowtime/1000)
+
+" shortnames=t
+| table 
+flowtime_t
+sourcenumber
+sourceregion
+destinationnumber
+destinationregion
+direction
+routername
+policydisposition
+ruleid</query>
+          <earliest>0</earliest>
+          <latest></latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
