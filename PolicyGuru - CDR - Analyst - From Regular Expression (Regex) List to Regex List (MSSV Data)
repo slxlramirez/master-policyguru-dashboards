@@ -1,0 +1,113 @@
+<form>
+  <label>PolicyGuru - CDR - Analyst - From Regular Expression (Regex) List to Regex List (MSSV Data)</label>
+  <fieldset submitButton="true">
+    <input type="dropdown" token="fromList_token">
+      <label>Source Number List</label>
+      <fieldForLabel>name</fieldForLabel>
+      <fieldForValue>from_list</fieldForValue>
+      <search>
+        <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query=" 
+SELECT  b.name, string_agg(a.value, '|') as from_list
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+WHERE   b.type IN (2,3)
+GROUP BY b.name
+" shortnames=t
+| table name from_list
+| sort name from_list</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="toList_token">
+      <label>Destination List</label>
+      <fieldForLabel>name</fieldForLabel>
+      <fieldForValue>list</fieldForValue>
+      <search>
+        <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query=" 
+SELECT  b.name, string_agg(a.value, '|') as list
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+WHERE   b.type IN (2,3)
+GROUP BY b.name
+" shortnames=t
+| table name list
+| sort name list</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="direction_token">
+      <label>Direction</label>
+      <choice value="INBOUND">INBOUND</choice>
+      <choice value="OUTBOUND">OUTBOUND</choice>
+    </input>
+    <input type="text" token="startDate_token">
+      <label>Start Date (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>by PolicyDisposition</title>
+        <search base="cdr">
+          <query>| stats count by policydisposition</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Allowed Numbers</title>
+        <search base="cdr">
+          <query>| search policydisposition = "ALLOWED"
+| stats count by sourcenumber
+| table sourcenumber count
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT to_char(flowtime_t,'YYYY-MM-DD hh24:mi:ss') as flowtime_t,
+       direction,
+       sourcenumber,
+       sourceregion,
+       destinationnumber,
+       destinationregion,
+       routername,
+       policydisposition
+FROM   pg_fs_pfd_cdr a
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
+       direction = '$direction_token$' AND
+       a.sourcenumber ~ ('$fromList_token$') AND
+       a.destinationnumber ~ ('$toList_token$')
+ORDER BY flowtime_t
+" shortnames=t
+| table flowtime_t direction sourcenumber sourceregion destinationnumber destinationregion routername policydisposition
+| sort flowtime_t</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
