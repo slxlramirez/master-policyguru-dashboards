@@ -1,0 +1,172 @@
+<dashboard>
+  <label>SecureLogix NVCL (last 8 weeks) - All Destinations</label>
+  <row>
+    <panel>
+      <chart>
+        <title>By Hour by NVCL Type</title>
+        <search base="cdr">
+          <query>| eval _time=strptime(flowtime_t,"%Y-%m-%d %H:%M:%S")
+| timechart span=1h count by lastname</query>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Callers by NVCL Type</title>
+        <search base="cdr">
+          <query>| chart count by lastname
+| sort -count</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>By Business Unit</title>
+        <search base="cdr">
+          <query>| chart count by list_name
+| sort -count
+| join type=left list_name
+[
+| dbxquery 
+maxrows=250000
+connection="mssv_db" 
+timeout=1800 query="
+SELECT b.list_name,
+       sum(a.calls) as total_calls
+FROM
+(
+SELECT 
+       CASE
+         WHEN LEFT(destinationnumber,1) &lt;&gt; '+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END as destinationnumber,
+       COUNT(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       CASE
+         WHEN LEFT(destinationnumber,1) &lt;&gt; '+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END IN 
+       (
+       SELECT value_original
+       FROM   pg_directory
+       WHERE  list_name LIKE '%BU%'
+       )
+GROUP BY CASE
+         WHEN LEFT(destinationnumber,1) &lt;&gt; '+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END
+) a INNER JOIN 
+(
+       SELECT value_original, list_name
+       FROM   pg_directory
+       WHERE  list_name LIKE '%BU%'
+) b ON a.destinationnumber=b.value_original
+GROUP BY b.list_name
+" shortnames=t
+]
+| eval perc_total=(count/total_calls)*100
+| table list_name count total_calls perc_total
+| rename list_name as "Business Unit" count as "Calls" total_calls as "Total Calls" perc_total as "% Total"</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top NVCL Callers</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber lastname
+| sort -count
+| head 10</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>SecureLogix NVCL CDR</title>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 
+query="
+SELECT a.*, COALESCE(b.list_name,'NOT ON A LIST') as list_name
+FROM
+(
+SELECT 
+      flowtime_t,
+      CASE
+         WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
+         WHEN LEFT(sourcenumber,1) =  '+' AND LENGTH(sourcenumber)=11 THEN '+1'||RIGHT(sourcenumber,10)
+         WHEN LEFT(sourcenumber,1) =  '1' AND LENGTH(sourcenumber)=11 THEN '+'||sourcenumber
+         ELSE sourcenumber
+       END as sourcenumber,
+       CASE
+         WHEN LEFT(destinationnumber,1) &lt;&gt; '+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END as destinationnumber,
+       policydisposition,
+       routername
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       CASE
+         WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
+         WHEN LEFT(sourcenumber,1) =  '+' AND LENGTH(sourcenumber)=11 THEN '+1'||RIGHT(sourcenumber,10)
+         WHEN LEFT(sourcenumber,1) =  '1' AND LENGTH(sourcenumber)=11 THEN '+'||sourcenumber
+         ELSE sourcenumber
+       END IN 
+       (
+       SELECT value_original
+       FROM   pg_directory
+       WHERE  list_name LIKE '%HCL%'
+       )
+) a LEFT OUTER JOIN 
+(
+       SELECT value_original, list_name
+       FROM   pg_directory
+       WHERE  list_name LIKE '%BU%'
+) b ON a.destinationnumber=b.value_original
+" shortnames=t
+| table flowtime_t sourcenumber destinationnumber policydisposition list_name routername
+| sort 0 flowtime_t
+| join type=left sourcenumber
+[
+| inputlookup securelogix_nhcl.csv
+| eval number="+".'Country Code'.'Area Code'.'Local Number'
+| rename "Last Name" as lastname
+| rename number as sourcenumber
+| table lastname sourcenumber
+]
+| table flowtime_t sourcenumber lastname destinationnumber  list_name routername policydisposition</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
