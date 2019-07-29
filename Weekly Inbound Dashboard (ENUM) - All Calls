@@ -1,0 +1,1121 @@
+<dashboard>
+  <label>Weekly Inbound Dashboard (ENUM) - All Calls</label>
+  <row>
+    <panel>
+      <table>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+query="
+SELECT EXTRACT(YEAR from CURRENT_DATE-7)||' Week '||EXTRACT(WEEK from CURRENT_DATE-7)||' Weekly Report - All Calls' as Heading
+" shortnames=t
+| table heading
+| rename heading AS "Report Header"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+query="
+SELECT 'Business Partner: SecureLogix MSSV' as Heading
+UNION ALL
+SELECT 'Deliverable: Weekly' as Heading
+UNION ALL
+SELECT 'Week of Year: '||EXTRACT(WEEK from CURRENT_DATE-7) as Heading
+UNION ALL
+SELECT 'Dates Covered: '||TO_CHAR((current_date - interval '7 days') - extract(dow from current_date) * '1 day'::interval,'DD Mon YYYY')||' - '||TO_CHAR((current_date - interval '7 days') - extract(dow from current_date) * '1 day'::interval + interval '6 days','DD Mon YYYY') as Heading
+UNION ALL
+SELECT 'Entries on List: Not Applicable'
+" shortnames=t
+| table heading
+| rename heading AS "Report Information"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Calls by Day by by PolicyDisposition (8 week trend)</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       datekey,
+       policydisposition,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)
+GROUP BY 
+         datekey,
+         policydisposition
+ORDER BY 
+         datekey,
+         policydisposition
+" shortnames=t
+| chart sum(calls) by datekey policydisposition</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">-45</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.showDataLabels">minmax</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/search/data_analysis_of_a_single_day_for_a_business_unit_aggregated_data__no_manual_run?businessUnit_token='AIG-BU-Life'&amp;dateKey_token=$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Business Unit vs Non Business Unit Calls</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.datekey, a.calls as total_calls, b.calls as bu_calls
+FROM
+(
+SELECT 
+       datekey,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)
+GROUP BY 
+         datekey
+ORDER BY 
+         datekey
+) a LEFT OUTER JOIN
+(
+SELECT 
+       datekey,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+        CASE
+         WHEN LEFT(destinationnumber,1) &lt;&gt; '+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END IN 
+       (
+       SELECT value_original
+       FROM   pg_directory
+       WHERE  list_name LIKE ('%BU%')
+       )
+GROUP BY 
+         datekey
+ORDER BY 
+         datekey
+) b ON a.datekey=b.datekey
+" shortnames=t
+| eval diff_calls=total_calls-bu_calls
+| table datekey total_calls bu_calls diff_calls
+| chart sum(total_calls) sum(diff_calls) sum(bu_calls) by datekey
+| rename sum(total_calls) as "Total Calls" sum(diff_calls) as "Non BU Calls" sum(bu_calls) as "Business Unit Calls"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.overlayFields">"Total Calls"</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Calls by Hour by PolicyDisposition (1 week)</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT to_char(date_trunc('hour',flowtime_t),'YYYY-MM-DD hh24:mi') as datehourkey,
+       policydisposition,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)
+GROUP BY datehourkey,
+         policydisposition
+ORDER BY datehourkey,
+         policydisposition
+" shortnames=t
+| table datehourkey policydisposition calls
+| chart sum(calls) by datehourkey policydisposition</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">-45</option>
+        <option name="charting.axisTitleX.text">Hour of the Day</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.showDataLabels">minmax</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/search/data_analysis_of_a_single_hour_for_a_business_unit_aggregated_data?businessUnit_token='AIG-BU-Life'&amp;hourKey_token=$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Allowed Calls (vs Previous), Trend 8</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       to_char(date_trunc('week', datekey + interval '1 day'),'YYYY-MM-DD hh24:mi:ss') AS weekly,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         to_char(date_trunc('week', datekey + interval '1 day'),'YYYY-MM-DD hh24:mi:ss')
+ORDER BY 
+         to_char(date_trunc('week', datekey + interval '1 day'),'YYYY-MM-DD hh24:mi:ss') DESC
+LIMIT 8
+" shortnames=t
+| table weekly calls
+| eval _time=strptime(weekly,"%Y-%m-%d %H:%M:%S")
+| timechart fixedrange=true span=1w sum(calls)
+| sort _time</query>
+          <earliest>-8w@w</earliest>
+          <latest>@w</latest>
+        </search>
+        <option name="colorBy">trend</option>
+        <option name="colorMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x65a637","0x6db7c6","0xf7bc38","0xf58f39","0xf7bc38","0xd93f3c"]</option>
+        <option name="rangeValues">[0,30,70,100,5000]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trendDisplayMode">percent</option>
+        <option name="trendInterval">-7d</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Terminated Calls (vs Previous), Trend 8</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       to_char(date_trunc('week', datekey + interval '1 day'),'YYYY-MM-DD hh24:mi:ss') AS weekly,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       policydisposition = 'TERMINATED'
+GROUP BY
+         to_char(date_trunc('week', datekey + interval '1 day'),'YYYY-MM-DD hh24:mi:ss')
+ORDER BY 
+         to_char(date_trunc('week', datekey + interval '1 day'),'YYYY-MM-DD hh24:mi:ss') DESC
+LIMIT 8
+" shortnames=t
+| table weekly calls
+| eval _time=strptime(weekly,"%Y-%m-%d %H:%M:%S")
+| timechart fixedrange=true span=1w sum(calls)
+| sort _time</query>
+          <earliest>-8w@w</earliest>
+          <latest>@w</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Top 10 Inbound Sources</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT x.*, 
+       y.calls as prev_calls,
+       ROUND(((x.calls-y.calls)::numeric/y.calls)*100,1) as perc_chg
+FROM
+(
+SELECT a.*, b.list_name
+FROM
+(
+SELECT 
+       sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       sourcenumber NOT IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         sourcenumber
+ORDER BY 
+         count(guid) DESC
+    LIMIT 10
+) a LEFT OUTER JOIN
+(
+  SELECT value_original, list_name
+  FROM   pg_directory
+) b ON a.sourcenumber=b.value_original
+) x LEFT OUTER JOIN
+(
+SELECT 
+       sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 14 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7AND
+       direction = 'INBOUND' AND
+       sourcenumber NOT IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         sourcenumber
+ORDER BY 
+         count(guid) DESC
+) y ON x.sourcenumber=y.sourcenumber
+" shortnames=t
+| table sourcenumber list_name calls prev_calls perc_chg
+| sort -calls
+| rename sourcenumber as "Source Number" calls as "Calls" list_name as "PolicyGuru List" prev_calls as "Prev Week" perc_chg as "% Chg"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+        <format type="number" field="calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="color" field="% Chg">
+          <colorPalette type="minMidMax" maxColor="#D6563C" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+        <format type="number" field="% Chg">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_inbound_source_last_week_aggregated_direct__no_manual_run?sourceNumber_token=$click.value$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Inbound Destinations Called</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT x.*, 
+       y.calls as prev_calls,
+       ROUND(((x.calls-y.calls)::numeric/y.calls)*100,1) as perc_chg
+FROM
+(
+SELECT 
+       destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         destinationnumber
+ORDER BY 
+         count(guid) DESC
+    LIMIT 10
+) x LEFT OUTER JOIN
+(
+SELECT 
+       destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 14 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7  AND
+       direction = 'INBOUND' AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         destinationnumber
+ORDER BY 
+         count(guid) DESC
+) y ON x.destinationnumber=y.destinationnumber
+" shortnames=t
+| table destinationnumber calls prev_calls perc_chg
+| join type=left destinationnumber
+[
+| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT list_name, value_original as destinationnumber
+FROM   pg_directory WHERE list_name LIKE '%BU%'
+"
+]
+| table destinationnumber list_name calls prev_calls perc_chg
+| rename destinationnumber as "Destination Number" calls as "Calls" list_name as "List Name" prev_calls as "Prev Week" perc_chg as "% Chg"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="calls">
+          <option name="precision">0</option>
+        </format>
+        <format type="number" field="% Chg">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="color" field="% Chg">
+          <colorPalette type="minMidMax" maxColor="#D6563C" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_inbound_destination_between_two_dates__policyguru_direct__no_manual_run?phoneNumber_token=$click.value$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top 10 Non-BU Destinations</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.*,
+       b.groups
+FROM
+(
+SELECT 
+       destinationnumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr a
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         destinationnumber
+ORDER BY 
+         count(guid) DESC
+) a LEFT OUTER JOIN
+(
+SELECT t.value_original,
+array_to_string(array_agg(list_name), ',') as groups
+FROM
+(
+SELECT list_name, value_original
+FROM pg_directory
+WHERE list_name LIKE '%BU%'
+ORDER BY list_name, value_original
+) t
+GROUP BY value_original
+) b ON a.destinationnumber=b.value_original
+WHERE value_original IS NULL
+ORDER BY calls DESC
+LIMIT 10
+" shortnames=t
+| table destinationnumber calls
+| rename destinationnumber as "Dest Num" calls as "Calls"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_inbound_destination_between_two_dates__policyguru_direct__no_manual_run?phoneNumber_token=$click.value$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Suspicious Callers | Spikey</title>
+      <table>
+        <title>Spikey Callers (excl Unan Dests)</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT b.*
+FROM
+(
+SELECT 
+   CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
+   sourcenumber,
+   sum(calls) as total_calls,
+   max(calls) as max_calls,
+   ROUND((max(calls)::numeric/sum(calls))*100,1) as perc_from_max_day
+FROM
+(
+SELECT  
+        TO_CHAR (a.flowtime_t,'YYYY-MM-DD') as flowtime_ts_gmt,
+        sourcenumber,
+        COUNT(a.guid) as calls
+FROM    pg_fs_pfd_cdr a
+WHERE   datekey &gt;= (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7) AND
+            datekey  &lt; (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)    ) AND
+            sourcenumber IS NOT NULL AND
+            routername LIKE 'enum%' AND
+       sourcenumber NOT IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED' AND
+       destinationnumber NOT IN 
+       (
+       SELECT
+       a.destinationnumber
+       FROM
+       (
+       SELECT
+        destinationnumber,
+        count(guid) as not_answered_calls
+       FROM    pg_fs_fe_cdr a
+       WHERE   datekey &gt;= (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7) AND
+               datekey  &lt; (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)    ) AND
+               direction = 'INBOUND' AND
+               a.calldispositions NOT IN ('ANSWERED','ANSWERED,UNKNOWN')
+       GROUP BY destinationnumber
+       ORDER BY destinationnumber
+       ) a LEFT OUTER JOIN 
+       (
+       SELECT
+        destinationnumber,
+        count(guid) as answered_calls
+       FROM    pg_fs_fe_cdr a
+       WHERE   datekey &gt;= (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7) AND
+               datekey  &lt; (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)    ) AND
+               direction = 'INBOUND' AND
+               a.calldispositions IN ('ANSWERED','ANSWERED,UNKNOWN')
+       GROUP BY destinationnumber
+       ORDER BY destinationnumber
+       ) b ON a.destinationnumber=b.destinationnumber
+       WHERE b.answered_calls IS NULL
+              )
+       GROUP BY  TO_CHAR (a.flowtime_t,'YYYY-MM-DD'), sourcenumber
+       ORDER BY  TO_CHAR (a.flowtime_t,'YYYY-MM-DD'), COUNT(a.guid)
+       ) a
+       GROUP BY sourcenumber
+       ) b 
+WHERE total_calls &gt;= 10 AND
+      perc_from_max_day &gt; .5
+ORDER BY perc_from_max_day DESC, total_calls DESC
+LIMIT 10
+" shortnames=t
+| table week_of_year sourcenumber total_calls max_calls perc_from_max_day
+| rename week_of_year as "Reported Week" sourcenumber as "Source Number" total_calls as "Total" max_calls as "Max" perc_from_max_day as "% Max Day"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <format type="number" field="perc_from_max_day">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="color" field="% Max Day">
+          <colorPalette type="minMidMax" maxColor="#D6563C" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+        <format type="number" field="% Max Day">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_spikey_source_last_week_aggregated_direct__no_manual_run?sourceNumber_token=$click.value2$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Suspicious Callers | Spread</title>
+      <table>
+        <title>High Spread Callers</title>
+        <search>
+          <query>| dbxquery
+connection="mssv_db" 
+query="
+SELECT week_of_year,
+       sourcenumber,
+       total_calls,
+       spread,
+       ROUND(spread::numeric/total_calls,3)*100 as perc_spread
+FROM 
+(
+    SELECT  
+            CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
+            sourcenumber,
+            count(a.guid) as total_calls,
+            count(distinct a.destinationnumber) as SPREAD
+    FROM    pg_fs_pfd_cdr a
+    WHERE   datekey &gt;= (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7) AND
+            datekey  &lt; (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)    ) AND
+            sourcenumber IS NOT NULL AND
+            routername LIKE 'enum%' AND
+       sourcenumber NOT IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED' AND
+       lower(sourcenumber) NOT IN ('anonymous')
+    GROUP BY sourcenumber
+) a
+ORDER BY spread DESC
+LIMIT 10" 
+shortnames=t 
+| table week_of_year sourcenumber total_calls spread perc_spread
+| rename week_of_year as "Reported Week", sourcenumber as "Source Number", total_calls AS "Total Calls", spread AS "Destinations Called" perc_spread as "% Spread"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <format type="number" field="Destinations Called">
+          <option name="precision">0</option>
+        </format>
+        <format type="color" field="% Spread">
+          <colorPalette type="minMidMax" maxColor="#D6563C" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax"></scale>
+        </format>
+        <format type="number" field="% Spread">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_inbound_source_last_week_aggregated_direct__no_manual_run?sourceNumber_token=$click.value2$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Suspicious Callers | BU Spread</title>
+      <table>
+        <title>by Business Unit Spread</title>
+        <search>
+          <query>| dbxquery
+connection="mssv_db" 
+query="
+SELECT x.sourcenumber,
+       sum(total_calls) as calls,
+       count(distinct destinationnumber) as spread,
+       count(distinct groups) as bu_spread
+FROM
+(
+SELECT a.sourcenumber, a.destinationnumber, a.total_calls, b.groups
+FROM
+(
+SELECT      sourcenumber,
+            destinationnumber,
+            count(a.guid) as total_calls
+FROM        pg_fs_pfd_cdr a
+WHERE       datekey &gt;= (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7) AND
+            datekey  &lt; (CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)    ) AND
+            sourcenumber IS NOT NULL AND
+       sourcenumber NOT IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED'
+GROUP BY sourcenumber, destinationnumber
+) a LEFT OUTER JOIN
+(
+ SELECT t.value_original,
+        array_to_string(array_agg(list_name), ',') as groups
+ FROM
+ (
+ SELECT list_name, value_original
+ FROM   pg_directory 
+ WHERE  list_name LIKE '%BU%'
+ ORDER BY list_name, value_original
+ ) t
+ GROUP BY value_original
+) b ON a.destinationnumber=b.value_original
+) x 
+WHERE sourcenumber NOT IN ('Unavailable','Anonymous','unknown','anonymous')
+GROUP BY sourcenumber
+--ORDER BY sourcenumber
+ORDER BY count(distinct groups) DESC, sum(total_calls) DESC
+LIMIT 10
+" 
+shortnames=t
+| table sourcenumber calls spread bu_spread</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Suspicious Callers | Invalid Format</title>
+      <table>
+        <title>Invalid Number Callers</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="mssv_db" 
+timeout=1800 query="
+SELECT
+        CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
+        regexp_matches(sourcenumber, '^\+1[0-9]{3}[0-1]{1}[0-9]{6}') as sourcenumber_regexp,
+        sourcenumber,
+        COUNT(a.guid) as calls
+FROM   pg_fs_pfd_cdr a
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       policydisposition = 'ALLOWED' AND
+       sourcenumber NOT IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       )
+GROUP BY regexp_matches(sourcenumber, '^\+1[0-9]{3}[0-1]{1}[0-9]{6}'),
+         sourcenumber
+ ORDER BY count(a.guid) DESC
+" shortnames=t
+| append
+[
+| dbxquery 
+maxrows=250000
+connection="mssv_db" 
+timeout=1800 query="
+SELECT
+        CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
+        regexp_matches(sourcenumber, '^\+1([0-9]{0,9})$$') as sourcenumber_regexp,
+        sourcenumber,
+        COUNT(a.guid) as calls
+FROM   pg_fs_pfd_cdr a
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       policydisposition = 'ALLOWED'
+GROUP BY regexp_matches(sourcenumber, '^\+1([0-9]{0,9})$$'),
+         sourcenumber
+ ORDER BY count(a.guid) DESC
+" shortnames=t
+]
+| append
+[
+| dbxquery 
+maxrows=250000
+connection="mssv_db" 
+timeout=1800 query="
+SELECT
+        CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
+        regexp_matches(sourcenumber, '^\+1([01][0-9][0-9]|200)[0-9]{7}$$') as sourcenumber_regexp,
+        sourcenumber,
+        COUNT(a.guid) as calls
+FROM   pg_fs_pfd_cdr a
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       policydisposition = 'ALLOWED'
+GROUP BY regexp_matches(sourcenumber, '^\+1([01][0-9][0-9]|200)[0-9]{7}$$'),
+         sourcenumber
+ ORDER BY count(a.guid) DESC
+" shortnames=t
+]
+| table week_of_year sourcenumber calls
+| sort -calls
+| dedup sourcenumber
+| head 10
+| rename sourcenumber as "Source Number" calls as "Calls" week_of_year as "Reported Week"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_inbound_source_last_week_aggregated_direct__no_manual_run?sourceNumber_token=$click.value2$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>SecureLogix NHCL Calls (Compare Last Week, Trend 8)</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       to_char(date_trunc('week', datekey),'YYYY-MM-DD hh24:mi:ss') AS weekly,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - (7*8) AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       policydisposition = 'ALLOWED' AND
+       CASE
+         WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
+         WHEN LEFT(sourcenumber,1) =  '+' AND LENGTH(sourcenumber)=11 THEN '+1'||RIGHT(sourcenumber,10)
+         WHEN LEFT(sourcenumber,1) =  '1' AND LENGTH(sourcenumber)=11 THEN '+'||sourcenumber
+         ELSE sourcenumber
+       END IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name LIKE '%HCL%'
+       )
+GROUP BY
+         to_char(date_trunc('week', datekey),'YYYY-MM-DD hh24:mi:ss')
+ORDER BY 
+         to_char(date_trunc('week', datekey),'YYYY-MM-DD hh24:mi:ss') DESC
+LIMIT 8
+" shortnames=t
+| table weekly calls
+| eval _time=strptime(weekly,"%Y-%m-%d %H:%M:%S")
+| timechart fixedrange=false span=1w sum(calls)
+| sort _time</query>
+          <earliest>-8w@w</earliest>
+          <latest>@w</latest>
+        </search>
+        <option name="colorBy">trend</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="trendInterval">-7d</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <table>
+        <title>SecureLogix NHCL</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
+       CASE
+         WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
+         WHEN LEFT(sourcenumber,1) =  '+' AND LENGTH(sourcenumber)=11 THEN '+1'||RIGHT(sourcenumber,10)
+         WHEN LEFT(sourcenumber,1) =  '1' AND LENGTH(sourcenumber)=11 THEN '+'||sourcenumber
+         ELSE sourcenumber
+       END as sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       policydisposition = 'ALLOWED' AND
+       CASE
+         WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
+         WHEN LEFT(sourcenumber,1) =  '+' AND LENGTH(sourcenumber)=11 THEN '+1'||RIGHT(sourcenumber,10)
+         WHEN LEFT(sourcenumber,1) =  '1' AND LENGTH(sourcenumber)=11 THEN '+'||sourcenumber
+         ELSE sourcenumber
+       END IN 
+       (
+       SELECT distinct value_original
+       FROM   pg_directory
+       WHERE  list_name LIKE '%HCL%'
+       ) AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+       CASE
+         WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
+         WHEN LEFT(sourcenumber,1) =  '+' AND LENGTH(sourcenumber)=11 THEN '+1'||RIGHT(sourcenumber,10)
+         WHEN LEFT(sourcenumber,1) =  '1' AND LENGTH(sourcenumber)=11 THEN '+'||sourcenumber
+         ELSE sourcenumber
+       END
+ORDER BY 
+         count(guid) DESC
+    LIMIT 5
+" shortnames=t
+| table week_of_year sourcenumber calls
+| join type=left sourcenumber
+[
+| inputlookup securelogix_nhcl.csv
+| eval number="+".'Country Code'.'Area Code'.'Local Number'
+| rename "Last Name" as lastname number as sourcenumber
+| table lastname sourcenumber
+]
+| table week_of_year sourcenumber lastname calls
+| rename week_of_year as "Reported Week" sourcenumber as "Source Number" calls as "Calls" lastname as "Category"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/search/data_analyis_inbound_source_last_week_aggregated_direct__no_manual_run?sourceNumber_token=$click.value2$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Top 5 Countries Calling (excl USA, Canada)</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       sourceregion,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       sourceregion NOT IN ('United States','Canada') AND
+       sourcenumber NOT IN 
+       (
+       SELECT value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         sourceregion
+ORDER BY 
+         count(guid) DESC
+LIMIT 5
+" shortnames=t
+| table sourceregion calls</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/search/international_cdr__by_country_no_manual_run?sourceCountry=$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Countries Calling</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.sourceregion,
+       a.calls as last_week,
+       b.calls as prev_week,
+       ROUND(((a.calls-b.calls)/b.calls::numeric)*100,1) as perc_change
+FROM
+(
+SELECT 
+       sourceregion,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       sourceregion NOT IN ('United States','Canada') AND
+       sourcenumber NOT IN 
+       (
+       SELECT value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED' 
+GROUP BY
+         sourceregion
+ORDER BY 
+         count(guid) DESC
+    LIMIT 10
+) a LEFT OUTER JOIN 
+(
+SELECT 
+       sourceregion,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 14 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7  AND
+       direction = 'INBOUND' AND
+       sourceregion NOT IN ('United States','Canada') AND
+       sourcenumber NOT IN 
+       (
+       SELECT value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         sourceregion
+ORDER BY 
+         count(guid) DESC
+) b ON a.sourceregion=b.sourceregion
+" shortnames=t
+| table sourceregion last_week prev_week perc_change
+| rename sourceregion as "Source Region" last_week as "Last Week" prev_week as "Prev Week" perc_change as "% Chg"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">heatmap</option>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="perc_change">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="color" field="perc_change">
+          <colorPalette type="minMidMax" maxColor="#D93F3C" midColor="#FFFFFF" minColor="#FFFFFF"></colorPalette>
+          <scale type="minMidMax" midType="percentile" midValue="50"></scale>
+        </format>
+        <drilldown>
+          <link target="_blank">/app/search/data_analysis_of_a_country_for_a_business_unit_aggregated_data?countryName_token=$click.value$&amp;businessUnit_token='all'</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <map>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT 
+       sourceregion,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+       direction = 'INBOUND' AND
+       sourceregion NOT IN ('United States','Canada') AND
+       sourcenumber NOT IN 
+       (
+       SELECT value_original
+       FROM   pg_directory
+       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       ) AND
+       policydisposition = 'ALLOWED'
+GROUP BY
+         sourceregion
+ORDER BY 
+         count(guid) DESC
+" shortnames=t
+| table sourceregion calls
+| rename sourceregion as "featureId"
+| geom geo_countries</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="mapping.map.zoom">3</option>
+        <option name="mapping.type">choropleth</option>
+        <option name="refresh.display">progressbar</option>
+      </map>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>SecureLogix Footer</title>
+        <search>
+          <query>| makeresults | eval footer="PolicyGuru® Solution | ETM® System"
+| append
+[
+| makeresults | eval footer="
+ETM, We See Your Voice, SecureLogix, and the SecureLogix Emblem are registered trademarks or registered trademarks and registered service marks of SecureLogix Corporation in the U.S.A. and other countries. PolicyGuru is a registered trademark of SecureLogix Corporation in the U.S.A. All other trademarks mentioned herein are believed to be trademarks of their respective owners."
+]
+| append
+[
+| makeresults | eval footer="© Copyright 2018 SecureLogix Corporation. All Rights Reserved.  This product is protected by one or more of the following patents: US 6,249,575 B1, US 6,320,948 B1, US 6,687,353 B1, US 6,718,024 B1, US 6,760,420 B2, US 6,760,421 B2, US 6,879,671 B1, US 7,133,511 B2, US 7,231,027 B2, US 7,440,558 B2, US 8,150,013 B2, CA 2,354,149, DE 1,415,459 B1, FR 1,415,459 B1, and GB 1,415,459 B1. U.S Patent Pending."
+]
+| table footer
+| rename footer as "SecureLogix TPC"</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
