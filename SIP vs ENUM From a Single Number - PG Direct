@@ -1,0 +1,113 @@
+<form>
+  <label>SIP vs ENUM From a Single Number - PG Direct</label>
+  <fieldset submitButton="true">
+    <input type="text" token="phoneNumber_token">
+      <label>Number</label>
+    </input>
+    <input type="text" token="startDate_token">
+      <label>Start Date</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>Total Enum Calls</title>
+        <search base="cdr">
+          <query>|  search routername = "enum" | stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Total Sip Calls</title>
+        <search base="cdr">
+          <query>|  search routername = "sip" | stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Perc More Sip Calls</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber routername
+| chart values(count) as calls over sourcenumber by routername
+| eval diff=sip-enum
+| eval perc_chg=(diff/sip)*100
+| eval perc_chg=ROUND(perc_chg,3)
+| fields - sourcenumber enum sip diff</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0,1]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">%</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>By Destination</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber routername destinationnumber_modified
+| chart values(count) as Calls over destinationnumber_modified by routername
+| eval diff=sip-enum
+| sort -sip</query>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">/app/search/sip_vs_enum_from_a_single_number_to_a_single_number__pg_direct?phoneNumberTwo_token=$click.value$&amp;phoneNumber_token=$phoneNumber_token$&amp;startDate_token=$startDate_token$&amp;endDate_token=$endDate_token$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD hh24:mi:ss') as flowtime_t,
+       sourcenumber,
+       destinationnumber,
+       CASE 
+          WHEN routername LIKE 'sip%' THEN '+1'||substring(destinationnumber from 7 for LENGTH(destinationnumber))
+          ELSE destinationnumber
+       END as destinationnumber_modified,
+       CASE 
+          WHEN routername LIKE 'sip%' THEN 'sip'
+          ELSE 'enum'
+       END as routername
+FROM   master.flowstart a
+WHERE  direction = 1 AND
+       a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$') * 1000)::bigint AND
+       a.analyticstime  &lt; (extract ('epoch' from timestamp '$endDate_token$') * 1000)::bigint AND
+       a.sourcenumber = '$phoneNumber_token$'
+ORDER BY flowtime_t
+" shortnames=t
+| table flowtime_t sourcenumber destinationnumber_modified destinationnumber routername
+| sort flowtime_t routername</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">40</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="routername">
+          <colorPalette type="sharedList"></colorPalette>
+          <scale type="sharedCategory"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>
