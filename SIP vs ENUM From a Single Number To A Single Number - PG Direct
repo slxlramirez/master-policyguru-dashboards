@@ -1,0 +1,223 @@
+<form>
+  <label>SIP vs ENUM From a Single Number To A Single Number - PG Direct</label>
+  <fieldset submitButton="true">
+    <input type="text" token="phoneNumber_token">
+      <label>Number</label>
+    </input>
+    <input type="text" token="phoneNumberTwo_token">
+      <label>To Number</label>
+    </input>
+    <input type="text" token="startDate_token">
+      <label>Start Date</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Last 30d Enum vs Sip</title>
+        <search>
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD') as datekey,
+       CASE 
+          WHEN routername LIKE 'sip%' THEN 'sip'
+          ELSE 'enum'
+       END as routername,
+       count(guid) as calls
+FROM   master.flowstart a
+WHERE  direction = 1 AND
+       a.analyticstime  &gt; (extract ('epoch' from ('$endDate_token$'::date - interval '30 days')::timestamp) * 1000)::bigint AND
+       a.sourcenumber = '$phoneNumber_token$' AND
+       CASE 
+          WHEN routername LIKE 'sip%' AND '+1'||substring(destinationnumber from 7 for LENGTH(destinationnumber)) = '$phoneNumberTwo_token$' THEN 1
+          WHEN routername LIKE 'enum%' AND a.destinationnumber = '$phoneNumberTwo_token$' THEN 1
+          ELSE 0
+       END=1
+GROUP BY to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD'),
+         CASE 
+          WHEN routername LIKE 'sip%' THEN 'sip'
+          ELSE 'enum'
+         END
+ORDER BY to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD'),
+         CASE 
+          WHEN routername LIKE 'sip%' THEN 'sip'
+          ELSE 'enum'
+         END
+" shortnames=t
+| table datekey routername calls
+| chart values(calls) over datekey by routername
+| eval diff=enum-sip
+| sort datekey
+| eval _time=strptime(datekey,"%Y-%m-%d")
+| timechart span=1d fixedrange=false sum(enum) as enum sum(sip) as sip sum(diff) as diff</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">diff</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>By Sip Router</title>
+        <search base="cdr">
+          <query>| search routertype = "sip"
+| eval _time=strptime(flowtime_t,"%Y-%m-%d %H:%M:%S")
+| timechart span=1m fixedrange=false count(flowtime_t) by routername</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>By Sip Router Counts</title>
+        <search base="cdr">
+          <query>| search routertype = "sip"
+| stats count by routername
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>By Enum Router</title>
+        <search base="cdr">
+          <query>| search routertype = "enum"
+| eval _time=strptime(flowtime_t,"%Y-%m-%d %H:%M:%S")
+| timechart span=1m fixedrange=false count(flowtime_t) by routername</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>By Enum Router Counts</title>
+        <search base="cdr">
+          <query>| search routertype = "enum"
+| stats count by routername
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Total Enum Calls</title>
+        <search base="cdr">
+          <query>|  search routertype = "enum" | stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Total Sip Calls</title>
+        <search base="cdr">
+          <query>|  search routertype = "sip" | stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Perc More Sip Calls</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber routertype
+| chart values(count) as calls over sourcenumber by routertype
+| eval diff=sip-enum
+| eval perc_chg=(diff/sip)*100
+| eval perc_chg=ROUND(perc_chg,3)
+| fields - sourcenumber enum sip diff</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[0,1]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">%</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>By Destination</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber routertype destinationnumber_modified
+| chart values(count) as Calls over destinationnumber_modified by routertype
+| eval diff=sip-enum
+| sort -sip</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD hh24:mi:ss') as flowtime_t,
+       sourcenumber,
+       destinationnumber,
+       CASE 
+          WHEN routername LIKE 'sip%' THEN '+1'||substring(destinationnumber from 7 for LENGTH(destinationnumber))
+          ELSE destinationnumber
+       END as destinationnumber_modified,
+       CASE 
+          WHEN routername LIKE 'sip%' THEN 'sip'
+          ELSE 'enum'
+       END as routertype,
+       routername
+FROM   master.flowstart a
+WHERE  direction = 1 AND
+       a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$') * 1000)::bigint AND
+       a.analyticstime  &lt; (extract ('epoch' from timestamp '$endDate_token$') * 1000)::bigint AND
+       a.sourcenumber = '$phoneNumber_token$' AND
+       CASE 
+          WHEN routername LIKE 'sip%' AND '+1'||substring(destinationnumber from 7 for LENGTH(destinationnumber)) = '$phoneNumberTwo_token$' THEN 1
+          WHEN routername LIKE 'enum%' AND a.destinationnumber = '$phoneNumberTwo_token$' THEN 1
+          ELSE 0
+       END=1
+ORDER BY flowtime_t
+" shortnames=t
+| table flowtime_t sourcenumber destinationnumber_modified destinationnumber routertype routername
+| sort flowtime_t routertype</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">40</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="color" field="routertype">
+          <colorPalette type="sharedList"></colorPalette>
+          <scale type="sharedCategory"></scale>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>
