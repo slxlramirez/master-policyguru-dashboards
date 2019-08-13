@@ -29,24 +29,24 @@ SELECT a.interval,
        a.calls-b.calls as diff
 FROM
 (
-SELECT to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss') as interval,
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
        count(guid) as calls
 FROM   pg_fs_fe_cdr
 WHERE  direction = 'INBOUND' AND
        datekey &gt;= '$startDate_token$'::date AND
        datekey  &lt; '$endDate_token$'::date
-GROUP BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
-ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
 ) a LEFT OUTER JOIN
 (
-SELECT to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss') as interval,
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
        count(guid) as calls
 FROM   pg_fs_pfd_cdr
 WHERE  direction = 'INBOUND' AND
        datekey &gt;= '$startDate_token$'::date AND
        datekey  &lt; '$endDate_token$'::date
-GROUP BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
-ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
 ) b ON a.interval=b.interval
 " shortnames=t
 | table interval enum_calls sip_calls diff
@@ -62,22 +62,6 @@ ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY
         <option name="charting.drilldown">none</option>
         <option name="refresh.display">progressbar</option>
       </chart>
-    </panel>
-  </row>
-  <row>
-    <panel>
-      <table>
-        <title>Notes</title>
-        <search>
-          <query>| makeresults 
-| eval comments="The above chart compares total sip calls vs total enum calls in mssv data tables"
-| table comments</query>
-          <earliest>-15m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="count">10</option>
-        <option name="drilldown">none</option>
-      </table>
     </panel>
   </row>
   <row>
@@ -146,7 +130,7 @@ WHERE  direction = 'INBOUND' AND
       <table>
         <title>Inbound ENUM/SIP MSSV Evaluation</title>
         <search base="inbound_enum_result">
-          <query>| eval result=case(perc_chg == "NA", "There are NO OUTBOUND enum calls.",perc_chg &gt; 0, "There are ".perc_chg."% MORE SIP calls than ENUM, which is probably not good.  It means we have some sip calls that were NOT PRESENT in the enum data.  Possible duplicate GUID issue?  Action: Reboot enum pair", perc_chg &lt; 0, "There are ".perc_chg."% LESS SIP calls than ENUM, which is...not ideal, but better than more sip than enum...", perc_chg == 0, "There are the EXACT SAME amount of SIP vs ENUM Calls.  This is probably good, but likely a coincidence.  There should probably be more ENUM than SIP.")
+          <query>| eval result=case(perc_chg == "NA", "There are NO OUTBOUND enum calls.",perc_chg &gt; 0, "There are ".perc_chg."% MORE SIP calls than ENUM, which is probably good.  It means, in theory, all of the enum calls are in the sip data.", perc_chg &lt; 0, "There are ".perc_chg."% LESS SIP calls than ENUM, which is probably not good.  It means we cannot find every enum call in the sip data.", perc_chg == 0, "There are the EXACT SAME amount of SIP vs ENUM Calls.  This is probably good, but likely a coincidence.  There should probably be more SIP than ENUM.")
 | table result</query>
         </search>
         <option name="count">10</option>
@@ -204,7 +188,7 @@ WHERE  direction = 'INBOUND' AND
 | table myjoin enum_inb_calls sip_bf_calls enum_inb_calls_adjusted sip_inb_calls
 | eval diff = enum_inb_calls_adjusted-sip_inb_calls
 | table myjoin enum_inb_calls sip_bf_calls enum_inb_calls_adjusted sip_inb_calls diff
-| eval perc_diff = ROUND(diff/sip_inb_calls,3)
+| eval perc_diff = ROUND(diff/sip_inb_calls,3)*100
 | table myjoin enum_inb_calls sip_bf_calls enum_inb_calls_adjusted sip_inb_calls diff perc_diff</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
@@ -238,15 +222,15 @@ WHERE  direction = 'INBOUND' AND
           <query>| dbxquery 
 connection="mssv_db" 
 timeout=1800 query="
-SELECT to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss') as interval,
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
        routername,
        count(guid) as sip_calls
 FROM   pg_fs_fe_cdr
 WHERE  direction = 'INBOUND' AND
        datekey &gt;= '$startDate_token$'::date AND
        datekey  &lt; '$endDate_token$'::date
-GROUP BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss'), routername
-ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss'), routername
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
 
 " shortnames=t
 | sort 0 interval
@@ -268,15 +252,15 @@ ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY
           <query>| dbxquery 
 connection="mssv_db" 
 timeout=1800 query="
-SELECT to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss') as interval,
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
        routername,
        count(guid) as sip_calls
 FROM   pg_fs_pfd_cdr
 WHERE  direction = 'INBOUND' AND
        datekey &gt;= '$startDate_token$'::date AND
        datekey  &lt; '$endDate_token$'::date
-GROUP BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss'), routername
-ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss'), routername
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss'), routername
 
 " shortnames=t
 | sort 0 interval
@@ -403,12 +387,13 @@ ORDER BY a.calls DESC
         </search>
         <option name="count">10</option>
         <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
         <format type="color" field="diff">
           <colorPalette type="minMidMax" maxColor="#FFFFFF" minColor="#DC4E41"></colorPalette>
           <scale type="minMidMax"></scale>
         </format>
         <drilldown>
-          <link target="_blank">/app/search/sip_vs_enum_for_a_single_source_click_action_required?phoneNumber_token=$click.value$&amp;startDate_token=$startDate_token$&amp;endDate_token=$endDate_token$</link>
+          <link target="_blank">/app/search/data_analyis_inbound_source_between_two_dates?form.sourceNumber_token=$click.value$&amp;form.startTime_token=$startDate_token$&amp;form.endTime_token=$endDate_token$</link>
         </drilldown>
       </table>
     </panel>
@@ -457,6 +442,72 @@ LIMIT 10
         <option name="drilldown">none</option>
         <option name="refresh.display">progressbar</option>
       </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Caller Ratios</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT result,
+       count(data.sourcenumber) as calls
+FROM
+(
+SELECT a.sourcenumber,
+       a.calls as enum_calls,
+       b.calls as sip_calls,
+       CASE
+         WHEN b.calls &gt; a.calls THEN 'MORE SIP'
+         WHEN a.calls &gt; b.calls THEN 'MORE ENUM'
+         WHEN a.calls = b.calls THEN 'JUST RIGHT'
+         WHEN b.calls IS NULL THEN 'NO SIP'
+         ELSE 'OTHER'
+       END as result
+FROM
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= '2019-08-05'::date AND
+       datekey  &lt; '2019-08-06'::date AND
+       sourcenumber &lt;&gt; '' AND
+       sourcenumber IS NOT NULL AND
+       direction = 'INBOUND'
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+) a LEFT OUTER JOIN
+(
+SELECT sourcenumber,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= '2019-08-05'::date AND
+       datekey  &lt; '2019-08-06'::date AND
+       direction = 'INBOUND'
+GROUP BY sourcenumber
+ORDER BY count(guid) DESC
+) b ON a.sourcenumber=b.sourcenumber
+ORDER BY a.calls DESC
+) data
+GROUP BY result
+" shortnames=t
+| table *
+| eventstats sum(calls) as "totalCount" 
+| eventstats sum(calls) as "resultCount" by result  
+| eval percent=(resultCount/totalCount)*100 
+| stats values(resultCount), values(percent) by result
+| rename values(resultCount) as total values(percent) as percent_total
+| eval percent_total=ROUND(percent_total,1)
+| eval result=result." (".percent_total."%)"
+| sort -total</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
     </panel>
   </row>
   <row>
@@ -628,71 +679,6 @@ LIMIT 10
         <option name="refresh.display">progressbar</option>
       </table>
     </panel>
-    <panel>
-      <chart>
-        <title>Caller Ratios</title>
-        <search>
-          <query>| dbxquery 
-connection="mssv_db" 
-timeout=1800 query="
-SELECT result,
-       count(data.sourcenumber) as calls
-FROM
-(
-SELECT a.sourcenumber,
-       a.calls as enum_calls,
-       b.calls as sip_calls,
-       CASE
-         WHEN b.calls &gt; a.calls THEN 'MORE SIP'
-         WHEN a.calls &gt; b.calls THEN 'MORE ENUM'
-         WHEN a.calls = b.calls THEN 'JUST RIGHT'
-         WHEN b.calls IS NULL THEN 'NO SIP'
-         ELSE 'OTHER'
-       END as result
-FROM
-(
-SELECT sourcenumber,
-       count(guid) as calls
-FROM   pg_fs_pfd_cdr
-WHERE  datekey &gt;= '2019-08-05'::date AND
-       datekey  &lt; '2019-08-06'::date AND
-       sourcenumber &lt;&gt; '' AND
-       sourcenumber IS NOT NULL AND
-       direction = 'INBOUND'
-GROUP BY sourcenumber
-ORDER BY count(guid) DESC
-) a LEFT OUTER JOIN
-(
-SELECT sourcenumber,
-       count(guid) as calls
-FROM   pg_fs_fe_cdr
-WHERE  datekey &gt;= '2019-08-05'::date AND
-       datekey  &lt; '2019-08-06'::date AND
-       direction = 'INBOUND'
-GROUP BY sourcenumber
-ORDER BY count(guid) DESC
-) b ON a.sourcenumber=b.sourcenumber
-ORDER BY a.calls DESC
-) data
-GROUP BY result
-" shortnames=t
-| table *
-| eventstats sum(calls) as "totalCount" 
-| eventstats sum(calls) as "resultCount" by result  
-| eval percent=(resultCount/totalCount)*100 
-| stats values(resultCount), values(percent) by result
-| rename values(resultCount) as total values(percent) as percent_total
-| eval percent_total=ROUND(percent_total,1)
-| eval result=result." (".percent_total."%)"
-| sort -total</query>
-          <earliest>-15m</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="charting.chart">pie</option>
-        <option name="charting.drilldown">none</option>
-        <option name="refresh.display">progressbar</option>
-      </chart>
-    </panel>
   </row>
   <row>
     <panel>
@@ -708,24 +694,24 @@ SELECT a.interval,
        a.calls-b.calls as diff
 FROM
 (
-SELECT to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss') as interval,
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
        count(guid) as calls
 FROM   pg_fs_fe_cdr
 WHERE  direction = 'OUTBOUND' AND
        datekey &gt;= '$startDate_token$'::date AND
        datekey  &lt; '$endDate_token$'::date
-GROUP BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
-ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
 ) a LEFT OUTER JOIN
 (
-SELECT to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss') as interval,
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
        count(guid) as calls
 FROM   pg_fs_pfd_cdr
 WHERE  direction = 'OUTBOUND' AND
        datekey &gt;= '$startDate_token$'::date AND
        datekey  &lt; '$endDate_token$'::date
-GROUP BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
-ORDER BY to_char(analyticstime_t AT TIME ZONE 'GMT' AT TIME ZONE 'EST5EDT','YYYY-MM-DD hh24:mi:ss')
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
 ) b ON a.interval=b.interval
 " shortnames=t
 | table interval enum_calls sip_calls diff
