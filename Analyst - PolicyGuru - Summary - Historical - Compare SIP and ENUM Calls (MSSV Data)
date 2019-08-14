@@ -471,8 +471,8 @@ FROM
 SELECT sourcenumber,
        count(guid) as calls
 FROM   pg_fs_pfd_cdr
-WHERE  datekey &gt;= '2019-08-05'::date AND
-       datekey  &lt; '2019-08-06'::date AND
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
        sourcenumber &lt;&gt; '' AND
        sourcenumber IS NOT NULL AND
        direction = 'INBOUND'
@@ -483,8 +483,8 @@ ORDER BY count(guid) DESC
 SELECT sourcenumber,
        count(guid) as calls
 FROM   pg_fs_fe_cdr
-WHERE  datekey &gt;= '2019-08-05'::date AND
-       datekey  &lt; '2019-08-06'::date AND
+WHERE  datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date AND
        direction = 'INBOUND'
 GROUP BY sourcenumber
 ORDER BY count(guid) DESC
