@@ -387,13 +387,12 @@ ORDER BY a.calls DESC
         </search>
         <option name="count">10</option>
         <option name="drilldown">cell</option>
-        <option name="refresh.display">progressbar</option>
         <format type="color" field="diff">
           <colorPalette type="minMidMax" maxColor="#FFFFFF" minColor="#DC4E41"></colorPalette>
           <scale type="minMidMax"></scale>
         </format>
         <drilldown>
-          <link target="_blank">/app/search/data_analyis_inbound_source_between_two_dates?form.sourceNumber_token=$click.value$&amp;form.startTime_token=$startDate_token$&amp;form.endTime_token=$endDate_token$</link>
+          <link target="_blank">/app/search/sip_vs_enum_from_a_single_number__pg_direct?form.phoneNumber_token=$click.value$&amp;form.startDate_token=$startDate_token$&amp;form.endDate_token=$endDate_token$</link>
         </drilldown>
       </table>
     </panel>
@@ -471,8 +470,8 @@ FROM
 SELECT sourcenumber,
        count(guid) as calls
 FROM   pg_fs_pfd_cdr
-WHERE  datekey &gt;= '$startDate_token$'::date AND
-       datekey  &lt; '$endDate_token$'::date AND
+WHERE  datekey &gt;= '2019-08-05'::date AND
+       datekey  &lt; '2019-08-06'::date AND
        sourcenumber &lt;&gt; '' AND
        sourcenumber IS NOT NULL AND
        direction = 'INBOUND'
@@ -483,8 +482,8 @@ ORDER BY count(guid) DESC
 SELECT sourcenumber,
        count(guid) as calls
 FROM   pg_fs_fe_cdr
-WHERE  datekey &gt;= '$startDate_token$'::date AND
-       datekey  &lt; '$endDate_token$'::date AND
+WHERE  datekey &gt;= '2019-08-05'::date AND
+       datekey  &lt; '2019-08-06'::date AND
        direction = 'INBOUND'
 GROUP BY sourcenumber
 ORDER BY count(guid) DESC
