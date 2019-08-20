@@ -1,0 +1,58 @@
+<dashboard>
+  <label>SIP vs ENUM For a Particular TimeStamp - PG Direct</label>
+  <row>
+    <panel>
+      <table>
+        <title>Transaction by Destination</title>
+        <search base="cdr">
+          <query>| eval _time=strptime(flowtime_t,"%Y-%m-%d %H:%M:%S")
+| transaction destinationnumber
+| fields - guid _raw closed_txn duration field_match_sum linecount
+| sort eventcount</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT guid,
+       to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD hh24:mi:ss') as flowtime_t,
+       sourcenumber,
+       destinationnumber,
+       CASE 
+          WHEN routername LIKE 'sip%' THEN 'sip'
+          ELSE 'enum'
+       END as routertype,
+       routername
+FROM   master.flowstart a
+WHERE  direction = 1 AND
+       a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$') * 1000)::bigint AND
+       a.analyticstime  &lt; (extract ('epoch' from timestamp '$endDate_token$') * 1000)::bigint AND
+       to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD hh24:mi:ss') = '$timeStamp_token$'
+ORDER BY flowtime_t
+" shortnames=t
+| table flowtime_t guid sourcenumber destinationnumber routertype routername
+| sort  flowtime_t destinationnumber routertype</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">100</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
