@@ -1,0 +1,232 @@
+<form>
+  <label>Search for Enum Source From SIP Source Number</label>
+  <fieldset submitButton="true">
+    <input type="text" token="numDays_token">
+      <label>Days Back</label>
+    </input>
+    <input type="text" token="phoneNumber_token">
+      <label>Phone Number</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Dashboard Instructions</title>
+        <search>
+          <query>| makeresults 
+| eval message="the 'SIP Callers with No ENUM Match' table shows sip number with no enum match.  these calls may have the pai/from discrepancy."
+| append
+[
+| makeresults 
+| eval message="copy and paste a number from the 'SIP Callers with No ENUM Match' table into the form to display possible cdr enum matches."
+]
+| append
+[
+| makeresults 
+| eval message="NOTE - this dashboard assumes destination and timestamp match.  It is NOT a 'true' look into the SIP headers (so there is some error risk)"
+]
+| fields - _time</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Total Unique SIP Sources</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   count (distinct sourcenumber)
+FROM     master.flowstart a INNER JOIN master.flowend b ON a.guid=b.guid
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '$numDays_token$ DAYS') * 1000)::bigint
+" shortnames=t</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Total Sip Sans Enum</title>
+        <search base="cdr_no_match">
+          <query>| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Total Calls From $phoneNumber_token$</title>
+        <search base="cdr">
+          <query>| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Unique Enum Sources</title>
+        <search base="cdr">
+          <query>| stats dc(sourcenumber_enum)</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Enum Sources</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber_enum
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>By Enum Router</title>
+        <search base="cdr">
+          <query>| stats count by routername_enum
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>By SIP Router</title>
+        <search base="cdr">
+          <query>| stats count by routername_sip
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>SIP Callers with No ENUM Match</title>
+        <search id="cdr_no_match">
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT 
+         x.sourcenumber,
+         x.sip_calls,
+         y.enum_calls
+FROM
+(
+SELECT   a.sourcenumber as sourcenumber,
+         COUNT(a.guid) as sip_calls
+FROM     master.flowstart a
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '$numDays_token$ DAYS') * 1000)::bigint
+GROUP BY a.sourcenumber
+) x LEFT OUTER JOIN
+(        
+SELECT   a.sourcenumber as sourcenumber,
+         COUNT(a.guid) as enum_calls
+FROM     master.flowstart a
+WHERE    a.routername LIKE 'enum%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '$numDays_token$ DAYS') * 1000)::bigint
+GROUP BY a.sourcenumber
+) y ON x.sourcenumber=y.sourcenumber
+WHERE enum_calls IS NULL
+" shortnames=t
+| table sourcenumber sip_calls
+| sort -sip_calls</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   to_timestamp(a.flowtime/1000) at time zone 'GMT' as flowtime_ts_gmt,
+         a.sourcenumber as sourcenumber_sip,
+         CASE  
+          WHEN LEFT(destinationnumber,6) = '+00000' THEN '+1'||RIGHT(destinationnumber,10)
+          WHEN LEFT(destinationnumber,1) = '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+          WHEN LEFT(destinationnumber,1) = '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+          ELSE destinationnumber
+         END as destinationnumber,
+         a.routername as routername_sip,
+         CASE a.direction
+           WHEN 1 THEN 'INBOUND'
+           WHEN 2 THEN 'OUTBOUND'
+           ELSE 'OTHER'
+         END as direction,
+         REPLACE((b.meta::json-&gt;'callDispositions')::varchar,'\"','') as calltype,
+         ROUND(COALESCE(duration::numeric,0)/1000) as dur_sec
+FROM     master.flowstart a INNER JOIN master.flowend b ON a.guid=b.guid
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '$numDays_token$ DAYS') * 1000)::bigint AND
+         a.sourcenumber = '$phoneNumber_token$'
+" shortnames=t
+| table flowtime_ts_gmt sourcenumber_sip destinationnumber direction routername_sip calltype dur_sec
+| sort 0 flowtime_ts_gmt 
+| join type=left flowtime_ts_gmt destinationnumber
+[
+| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT  to_timestamp(a.flowtime/1000) at time zone 'GMT' as flowtime_ts_gmt,
+        a.sourcenumber as sourcenumber_enum,
+        a.destinationnumber,
+        routername as routername_enum
+FROM     master.flowstart a 
+WHERE    a.routername LIKE 'enum%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '$numDays_token$ DAYS') * 1000)::bigint AND
+         to_char(to_timestamp(a.flowtime/1000) at time zone 'GMT','YYYY-MM-DD hh24:mi:ss') IN 
+         (
+         SELECT   to_char(to_timestamp(c.flowtime/1000) at time zone 'GMT','YYYY-MM-DD hh24:mi:ss')
+         FROM     master.flowstart c 
+         WHERE    c.routername LIKE 'sip%' AND
+                  c.analyticstime &gt;= (extract (epoch from now() - INTERVAL '30 DAYS') * 1000)::bigint AND
+                  c.sourcenumber = '$phoneNumber_token$'
+         )" shortnames=t
+| table flowtime_ts_gmt sourcenumber_enum destinationnumber routername_enum
+| sort 0 flowtime_ts_gmt
+]
+| table flowtime_ts_gmt sourcenumber_sip sourcenumber_enum destinationnumber direction routername_sip routername_enum calltype dur_sec
+| sort 0 flowtime_ts_gmt</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
