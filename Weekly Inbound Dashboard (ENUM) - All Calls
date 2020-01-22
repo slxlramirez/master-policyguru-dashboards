@@ -820,11 +820,73 @@ GROUP BY regexp_matches(sourcenumber, '^\+1([01][0-9][0-9]|200)[0-9]{7}$$'),
         </drilldown>
       </table>
     </panel>
+    <panel>
+      <table>
+        <title>Short Duration (avg dur &lt; 20,calls &gt;= 10 , spread &gt; 5)</title>
+        <search>
+          <query>| dbxquery 
+maxrows=500000
+connection=mssv_db
+query="
+SELECT x.sourcenumber,
+       x.calls,
+       x.spread,
+       x.total_duration_seconds,
+       x.avg_duration_seconds,
+       y.calls as enum_calls
+FROM
+(
+SELECT b.*
+FROM
+(
+SELECT   
+         a.sourcenumber,
+         count(a.guid) as calls,
+         count(a.destinationnumber) as spread,
+         ROUND(sum(a.duration/1000),1) as total_duration_seconds,
+         ROUND(avg(a.duration/1000),1) as avg_duration_seconds
+FROM     pg_fs_fe_cdr a
+WHERE    datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND 
+         direction = 'INBOUND' AND
+         calldispositions = 'ANSWERED' AND
+         sourcenumber NOT IN 
+         (
+         SELECT  distinct value_parsed
+         FROM    pg_directory
+         WHERE   list_name LIKE '%HCL%'
+         ) 
+GROUP BY sourcenumber 
+ORDER BY sourcenumber
+) b
+WHERE  avg_duration_seconds &lt; 20 AND calls &gt;= 10 AND spread &gt; 5 AND LENGTH(sourcenumber) = 12
+) x LEFT OUTER JOIN
+(
+SELECT   a.sourcenumber,
+         count(a.guid) as calls
+FROM     pg_fs_pfd_cdr a
+WHERE    datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND 
+         direction = 'INBOUND'
+GROUP BY sourcenumber 
+ORDER BY sourcenumber
+) y ON x.sourcenumber=y.sourcenumber
+"
+| table sourcenumber calls enum_calls avg_duration_seconds spread 
+| sort -calls -avg_duration_seconds -spread
+| head 10</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
   </row>
   <row>
     <panel>
       <single>
-        <title>SecureLogix NHCL Calls (Compare Last Week, Trend 8)</title>
+        <title>SecureLogix NVCL Calls (Compare Last Week, Trend 8)</title>
         <search>
           <query>| dbxquery 
 connection="mssv_db" 
@@ -870,7 +932,7 @@ LIMIT 8
     </panel>
     <panel>
       <table>
-        <title>SecureLogix NHCL</title>
+        <title>SecureLogix NVCL</title>
         <search>
           <query>| dbxquery 
 connection="mssv_db" 
@@ -899,8 +961,7 @@ WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) 
        SELECT distinct value_original
        FROM   pg_directory
        WHERE  list_name LIKE '%HCL%'
-       ) AND
-       policydisposition = 'ALLOWED'
+       )
 GROUP BY
        CASE
          WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
