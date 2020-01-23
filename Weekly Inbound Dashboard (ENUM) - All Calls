@@ -871,6 +871,7 @@ WHERE    datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int
 GROUP BY sourcenumber 
 ORDER BY sourcenumber
 ) y ON x.sourcenumber=y.sourcenumber
+WHERE y.calls IS NOT NULL
 "
 | table sourcenumber calls enum_calls avg_duration_seconds spread 
 | sort -calls -avg_duration_seconds -spread
