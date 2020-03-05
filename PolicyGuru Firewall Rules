@@ -1,0 +1,84 @@
+<dashboard>
+  <label>PolicyGuru Firewall Rules</label>
+  <row>
+    <panel>
+      <table>
+        <title>Unique Rules</title>
+        <search base="cdr">
+          <query>| stats dc(rule_name) as entries by rule_name
+| fields - entries
+| sort rule_name</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Entries on Source Lists</title>
+        <search base="cdr">
+          <query>| stats count by source_list
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Firewall Rules</title>
+        <search id="cdr">
+          <query>| dbxquery
+connection="local_ngp"
+timeout=1800
+query="
+SELECT t.*, u.value as dst_value
+FROM
+(
+SELECT x.*, y.value as src_value
+FROM
+(
+SELECT CASE a.action
+        WHEN 0 THEN 'ALLOW'
+        WHEN 1 THEN 'TERMINATE'
+        WHEN 2 THEN 'REDIRECT'
+        ELSE 'OTHER'
+       END as action,
+       actioninfo,
+       destinationlistinggroup_id,
+       CASE a.direction
+         WHEN 1 THEN 'INBOUND'
+         WHEN 2 THEN 'OUTBOUND'
+         ELSE 'OTHER'
+       END as direction,
+       a.id,
+       a.name,
+       sourcelistinggroup_id,
+       b.name as src_name,
+       c.name as dst_name
+from ((master.policyrule a LEFT OUTER JOIN master.listinggroup b ON a.sourcelistinggroup_id=b.id)
+       LEFT OUTER JOIN master.listinggroup c ON a.destinationlistinggroup_id=c.id)
+) x LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) y ON x.src_name=y.name
+) t LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) u ON t.dst_name=u.name
+" shortnames=t
+| table id name sourcelistinggroup_id src_name src_value destinationlistinggroup_id dst_name dst_value direction action actioninfo starttime endtime updatedtime
+| table name src_name src_value dst_name dst_value direction action actioninfo
+| sort name src_value
+| rename name as "rule_name" src_name as "source_list" src_value as "source_entry" dst_name as "dest_list" dst_value as "dest_entry" direction as "direction" action as "action" actioninfo as "action_info"</query>
+          <earliest>-15m</earliest>
+         <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
