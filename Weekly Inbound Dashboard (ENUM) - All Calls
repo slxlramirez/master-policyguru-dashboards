@@ -744,70 +744,35 @@ connection="mssv_db"
 timeout=1800 query="
 SELECT
         CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
-        regexp_matches(sourcenumber, '^\+1[0-9]{3}[0-1]{1}[0-9]{6}') as sourcenumber_regexp,
         sourcenumber,
         COUNT(a.guid) as calls
 FROM   pg_fs_pfd_cdr a
-WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
-       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
+WHERE  datekey >= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  < CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
        direction = 'INBOUND' AND
        policydisposition = 'ALLOWED' AND
-       sourcenumber NOT IN 
+       sourcenumber ~ '(^\+1[0-9]{3}[0-1]{1}[0-9]{6}|^\+1([0-9]{0,9})$|^\+1([01][0-9][0-9]|200)[0-9]{7}$|^\+1[0-9]{11,}|^\+[0-9]{16,})' AND
+       sourcenumber NOT IN
        (
-       SELECT distinct value_original
-       FROM   pg_directory
-       WHERE  list_name IN ('Graylist_PN','Whitelist_PN')
+       SELECT
+         SUBSTR(value_original,3,12) as sourcenumber
+       FROM   pg_directory b
+       WHERE  list_name LIKE ('%Whitelist%')
+       ) AND
+       sourcenumber NOT IN
+       (
+       SELECT value_original as sourcenumber
+       FROM   pg_directory b
+       WHERE  list_name LIKE ('%Graylist%')
        )
-GROUP BY regexp_matches(sourcenumber, '^\+1[0-9]{3}[0-1]{1}[0-9]{6}'),
+GROUP BY
          sourcenumber
- ORDER BY count(a.guid) DESC
+ORDER BY count(a.guid) DESC
 " shortnames=t
-| append
-[
-| dbxquery 
-maxrows=250000
-connection="mssv_db" 
-timeout=1800 query="
-SELECT
-        CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
-        regexp_matches(sourcenumber, '^\+1([0-9]{0,9})$$') as sourcenumber_regexp,
-        sourcenumber,
-        COUNT(a.guid) as calls
-FROM   pg_fs_pfd_cdr a
-WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
-       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
-       direction = 'INBOUND' AND
-       policydisposition = 'ALLOWED'
-GROUP BY regexp_matches(sourcenumber, '^\+1([0-9]{0,9})$$'),
-         sourcenumber
- ORDER BY count(a.guid) DESC
-" shortnames=t
-]
-| append
-[
-| dbxquery 
-maxrows=250000
-connection="mssv_db" 
-timeout=1800 query="
-SELECT
-        CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 as week_of_year,
-        regexp_matches(sourcenumber, '^\+1([01][0-9][0-9]|200)[0-9]{7}$$') as sourcenumber_regexp,
-        sourcenumber,
-        COUNT(a.guid) as calls
-FROM   pg_fs_pfd_cdr a
-WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
-       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) AND
-       direction = 'INBOUND' AND
-       policydisposition = 'ALLOWED'
-GROUP BY regexp_matches(sourcenumber, '^\+1([01][0-9][0-9]|200)[0-9]{7}$$'),
-         sourcenumber
- ORDER BY count(a.guid) DESC
-" shortnames=t
-]
 | table week_of_year sourcenumber calls
 | sort -calls
 | dedup sourcenumber
-| head 10
+| head 5
 | rename sourcenumber as "Source Number" calls as "Calls" week_of_year as "Reported Week"</query>
           <earliest>-15m</earliest>
           <latest>now</latest>
