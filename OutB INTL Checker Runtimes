@@ -1,0 +1,3 @@
+index="scheduler" "Outbound INTL Checker" 
+| table _time savedsearch_name run_time
+| timechart span=15m sum(run_time) by savedsearch_name
