@@ -1,0 +1,200 @@
+<form>
+  <label>Drop in SIP Calls Reponse Dashboard (MSSV and PG Data)</label>
+  <fieldset submitButton="true">
+    <input type="text" token="startDate_token">
+      <label>Start Date (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date</label>
+    </input>
+    <input type="dropdown" token="timeChart_token">
+      <label>Timechart Interval</label>
+      <choice value="1d">by Day</choice>
+      <choice value="1h">by Hour</choice>
+      <choice value="15m">by 15m</choice>
+      <default>1d</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>PG Direct vs MSSV DB Data</title>
+        <search>
+          <query>| dbxquery 
+timeout=1800
+maxrows=1
+connection=mssv_db
+query="
+SELECT 'myjoin' myjoin, 
+        count(guid) as agg_calls
+FROM    pg_fs_fe_cdr a
+WHERE   analyticstime_t &gt;= (date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT' - interval '1 day')
+        AND analyticstime_t  &lt; (date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT')
+"
+shortnames=t
+| join type=left myjoin
+[
+| dbxquery 
+timeout=1800
+maxrows=1
+connection=ngp_connection
+query="
+SELECT 'myjoin' myjoin, 
+        count(guid) as pg_calls
+FROM    master.flowstart a
+WHERE   a.analyticstime &gt;= (extract ('epoch' from date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT'  - interval '1 day')*1000)::bigint AND
+        a.analyticstime  &lt; (extract ('epoch' from date_trunc('day', current_date)::timestamp AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT'  - interval '0 day')*1000)::bigint AND
+        a.routername LIKE 'sip%'
+"
+shortnames=t
+]
+| table *
+| eval call_diff=agg_calls-pg_calls
+| table pg_calls agg_calls call_diff
+| rename pg_calls as "PolicyGuru Calls" agg_calls as "MSSV DB Calls" call_diff as "Difference"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound ENUM vs SIP</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT a.interval, 
+       a.calls as sip_calls, 
+       b.calls as enum_calls,
+       a.calls-b.calls as diff
+FROM
+(
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+) a LEFT OUTER JOIN
+(
+SELECT to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as interval,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+ORDER BY to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss')
+) b ON a.interval=b.interval
+" shortnames=t
+| table interval enum_calls sip_calls diff
+| sort 0 interval
+| eval _time=strptime(interval,"%Y-%m-%d %H:%M:%S")
+| timechart span=$timeChart_token$ fixedrange=false sum(enum_calls) as enum sum(sip_calls) as sip sum(diff) as diff</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">diff</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound SIP Calls by Routername</title>
+        <search base="cdrByDayByRoutername">
+          <query>| eval _time=strptime(interval,"%Y-%m-%d")
+| timechart span=$timeChart_token$ fixedrange=false sum(sip_calls) as sip by routername</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound SIP by First Octet of Routername</title>
+        <search base="cdrByDayByRoutername">
+          <query>| eval _time=strptime(interval,"%Y-%m-%d")
+| timechart span=$timeChart_token$ fixedrange=false sum(sip_calls) as sip by first_octet</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound SIP by First Two Octets of Routernames</title>
+        <search base="cdrByDayByRoutername">
+          <query>| eval firstTwoOctets=first_octet.second_octet
+| eval _time=strptime(interval,"%Y-%m-%d")
+| timechart span=$timeChart_token$ fixedrange=false sum(sip_calls) as sip by firstTwoOctets</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Inbound SIP by First Three Octets of Routername</title>
+        <search base="cdrByDayByRoutername">
+          <query>| eval firstThreeOctets=first_octet.second_octet.third_octet
+| eval _time=strptime(interval,"%Y-%m-%d")
+| timechart span=$timeChart_token$ fixedrange=false sum(sip_calls) as sip by firstThreeOctets</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>inbound  sip routername by day</title>
+        <search id="cdrByDayByRoutername">
+          <query>| dbxquery 
+connection="mssv_db" 
+timeout=1800 query="
+SELECT datekey as interval,
+       routername,
+       count(guid) as sip_calls
+FROM   pg_fs_fe_cdr
+WHERE  direction = 'INBOUND' AND
+       datekey &gt;= '$startDate_token$'::date AND
+       datekey  &lt; '$endDate_token$'::date
+GROUP BY datekey, routername
+ORDER BY datekey, routername
+
+" shortnames=t
+| sort 0 interval
+| rex field=routername "(?&lt;first_octet&gt;sip:\d+.)(?&lt;second_octet&gt;\d+.)(?&lt;third_octet&gt;\d+.)(?&lt;fourth_octet&gt;\d+)"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
