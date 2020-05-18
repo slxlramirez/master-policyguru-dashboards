@@ -1,0 +1,38 @@
+<form>
+  <label>Outbound INTL SIP Calls 15m (MSSV Data)</label>
+  <fieldset submitButton="false">
+    <input type="text" token="daysBack_token">
+      <label>Days Back</label>
+      <default>7</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Outbound SIP Calls By 15m (Excl United States)</title>
+        <search>
+          <query>| dbxquery 
+connection="mssv_db" 
+query="
+SELECT   --to_char(to_timestamp(floor((extract('epoch' from to_timestamp(analyticstime/1000) AT TIME ZONE 'CST') / 900 )) * 900),'YYYY-MM-DD hh24:MI')  as bucket,
+         to_char(to_timestamp(floor((extract('epoch' from analyticstime_t AT TIME ZONE 'CST') / 900 )) * 900),'YYYY-MM-DD hh24:MI') as bucket,
+         COALESCE(count(guid),0) as calls
+FROM     pg_fs_fe_cdr
+WHERE    datekey &gt;= (CURRENT_DATE - INTERVAL '$daysBack_token$ day') AND
+         direction = 'OUTBOUND' AND
+         destinationregion NOT IN ('United States')
+GROUP BY to_char(to_timestamp(floor((extract('epoch' from analyticstime_t AT TIME ZONE 'CST') / 900 )) * 900),'YYYY-MM-DD hh24:MI')
+ORDER BY to_char(to_timestamp(floor((extract('epoch' from analyticstime_t AT TIME ZONE 'CST') / 900 )) * 900),'YYYY-MM-DD hh24:MI')
+" shortnames=t 
+| table bucket calls
+| eval _time=strptime(bucket,"%Y-%m-%d %H:%M") 
+| timechart span=15m sum(calls)</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+</form>
