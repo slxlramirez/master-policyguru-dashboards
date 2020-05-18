@@ -1,0 +1,31 @@
+| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   a.destinationregion,
+         COUNT(a.guid) as calls
+FROM     master.flowstart a
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 2 AND
+         a.destinationregion NOT IN('United States') AND
+         a.analyticstime >= (extract (epoch from now() - INTERVAL '15 MINUTES') * 1000)::bigint AND
+         a.guid NOT IN 
+         (
+         SELECT guid 
+         FROM   master.policyflowdetails s
+         WHERE  s.analyticstime >= (extract (epoch from now() - INTERVAL '15 MINUTES') * 1000)::bigint AND
+                s.policydisposition = 2
+         ) AND
+         a.sourcenumber NOT IN
+         (
+         SELECT distinct a.value
+         FROM   master.listing a JOIN master.listinggroup b ON a.listinggroupid=b.id
+         WHERE  b.name IN ('Whitelist','Graylist')
+         )
+GROUP BY a.destinationregion
+ORDER BY count(a.guid) DESC
+" shortnames=t
+| table destinationregion calls
+| table destinationregion calls
+| addcoltotals
+| eval destinationregion = if(isnull(destinationregion), "Total", destinationregion)
