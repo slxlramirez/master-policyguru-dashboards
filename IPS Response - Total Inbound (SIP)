@@ -1,0 +1,60 @@
+<dashboard>
+  <label>IPS Response - Total Inbound (SIP)</label>
+  <row>
+    <panel>
+      <chart>
+        <title>Calls by 15m Buckets - Last 24hrs</title>
+        <search base="parent">
+          <query>| chart sum(calls) as calls sum(duration) as duration by buckets</query>
+        </search>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">duration</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/search/ips_response__total_inbound_details_not_manual_run?date_value=$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Last 24 Hours 15m Buckets</title>
+        <search id="parent">
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT  buckets,
+        COALESCE(count(guid),0) as calls,
+        COALESCE(sum(duration),0) as duration
+FROM
+(
+SELECT   to_timestamp(floor((extract('epoch' from to_timestamp(a.analyticstime/1000)) / 900 )) * 900) AT TIME ZONE 'GMT' as buckets,
+         a.guid,
+         a.sourcenumber,
+         a.destinationnumber,
+         a.destinationregion,
+         CASE
+            WHEN b.flowtime IS NULL THEN ROUND(((EXTRACT(EPOCH FROM now())*1000-a.flowtime)/1000/60::numeric)::numeric,1)
+            ELSE ROUND((b.flowtime-a.flowtime)/1000/60::numeric,1)
+         END as duration
+FROM     master.flowstart a LEFT OUTER JOIN master.flowend b ON a.guid=b.guid
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 2 AND
+         a.destinationregion NOT IN ('United States') AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '24 HOUR') * 1000)::bigint
+) x
+GROUP BY buckets
+" shortnames=t</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
