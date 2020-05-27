@@ -1,0 +1,56 @@
+<form>
+  <label>Find External Callers Based on Calls, Spread and Duration</label>
+  <fieldset submitButton="true">
+    <input type="text" token="startDate_token">
+      <label>Start Date (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="calls_token">
+      <label>Min Calls</label>
+    </input>
+    <input type="text" token="spread_token">
+      <label>Min Spread</label>
+    </input>
+    <input type="text" token="duration_token">
+      <label>Max Avg Duration (s)</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <search>
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT  *
+FROM
+(
+SELECT   a.sourcenumber,
+         count(a.guid) as calls,
+         count(destinationnumber) as spread,
+         sum(duration/1000) as sum_duration,
+         avg(duration/1000) as avg_duration
+FROM     master.flowstart a LEFT OUTER JOIN master.flowend b ON a.guid=b.guid
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= extract('epoch' from '$startDate_token$'::timestamp)*1000 AND
+         a.analyticstime  &lt; extract('epoch' from '$endDate_token$'::timestamp)*1000
+GROUP BY sourcenumber
+) foo 
+WHERE calls &gt; $calls_token$ AND 
+      spread &gt; $spread_token$ AND 
+      avg_duration &lt; $duration_token$
+" shortnames=t 
+| table sourcenumber calls spread sum_duration avg_duration
+| sort avg_duration</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
