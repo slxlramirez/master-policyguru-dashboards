@@ -1,0 +1,130 @@
+<dashboard>
+  <label>IPS Response - Outbound INTL (SIP Duration) Details</label>
+  <row>
+    <panel>
+      <chart>
+        <title>Calls by Minute</title>
+        <search base="cdr">
+          <query>| eval _time=strptime(starttime,"%Y-%m-%d %H:%M:%S")
+| timechart fixedrange=false span=1m count sum(duration_current_interval) as dur_interval</query>
+        </search>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.overlayFields">dur_interval</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Top Sourcenumbers</title>
+        <search base="cdr">
+          <query>| stats count as calls sum(duration_current_interval) as duration by sourcenumber
+| sort -duration</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Destinationnumbers</title>
+        <search base="cdr">
+          <query>| stats count as calls sum(duration_current_interval) as duration by destinationnumber
+| sort -duration</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="duration">
+          <option name="precision">1</option>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Destination Regions</title>
+        <search base="cdr">
+          <query>| stats count as calls sum(duration_current_interval) as duration by destinationregion
+| sort -duration</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR for $clickTime_token$</title>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT  sourcenumber, destinationnumber, destinationregion, starttime, starttimeepoch, endtime, duration, is_this_interval,
+        CASE
+          WHEN is_this_interval=0 AND (endtime IS NULL OR endtime &gt; to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') + INTERVAL '0 MINUTE') THEN 15
+          WHEN is_this_interval=1 AND (endtime IS NULL OR endtime &gt; to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') + INTERVAL '0 MINUTE') THEN 
+             ROUND((((extract (epoch from to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') + INTERVAL '0 MINUTE') * 1000) - starttimeepoch)/1000/60)::numeric,1)
+          WHEN is_this_interval=1 AND endtime IS NOT NULL THEN ROUND(duration::numeric,1)
+          ELSE 0
+        END as duration_current_interval
+FROM
+(
+SELECT   c.*,
+         extract('epoch' from starttime)*1000 as starttimeepoch,
+         extract('epoch' from starttime) as starttime2,
+         EXTRACT(EPOCH FROM now())*1000 as now1,
+         EXTRACT(EPOCH FROM now()) as now2,
+         extract (epoch from now() - INTERVAL  '0 MINUTE') * 1000 as earlier1,
+         extract (epoch from now() - INTERVAL  '0 MINUTE') as earlier2,
+         CASE
+            WHEN extract('epoch' from starttime)*1000 BETWEEN (extract (epoch from to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') - INTERVAL '15 MINUTE') * 1000) AND (extract (epoch from to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') + INTERVAL '0 MINUTE') * 1000)  THEN 1 ELSE 0
+         END as is_this_interval
+FROM
+(
+SELECT   a.sourcenumber,
+         a.destinationnumber,
+         a.destinationregion,
+         to_timestamp(a.flowtime/1000) as starttime,
+         to_timestamp(b.flowtime/1000) as endtime,
+         ROUND(b.duration/1000/60::numeric,1) as duration
+FROM     master.flowstart a LEFT OUTER JOIN master.flowend b ON a.guid=b.guid
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 2 AND
+         a.destinationregion NOT IN ('United States') AND
+         a.analyticstime &gt;= (extract (epoch from to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') - INTERVAL '60 MINUTE') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract (epoch from to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') + INTERVAL '0 MINUTE') * 1000)::bigint AND
+         a.guid NOT IN 
+         (
+         SELECT guid 
+         FROM   master.policyflowdetails s
+         WHERE  a.analyticstime &gt;= (extract (epoch from to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') - INTERVAL '60 MINUTE') * 1000)::bigint AND
+         s.analyticstime  &lt; (extract (epoch from to_timestamp('$clickTime_token$','YYYY-MM-DD hh24:mi:ss') + INTERVAL '0 MINUTE') * 1000)::bigint AND
+                s.policydisposition = 2
+         ) AND
+         a.sourcenumber NOT IN
+         (
+         SELECT distinct a.value
+         FROM   master.listing a JOIN master.listinggroup b ON a.listinggroupid=b.id
+         WHERE  b.name IN ('Whitelist','Graylist')
+         )
+) c
+) d
+" shortnames=t
+| search duration_current_interval &gt; 0
+| table starttime endtime sourcenumber destinationnumber destinationregion duration is_this_interval duration_current_interval</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
