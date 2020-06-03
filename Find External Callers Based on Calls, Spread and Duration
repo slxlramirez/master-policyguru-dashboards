@@ -27,9 +27,10 @@ timeout=1800 query="
 SELECT  *
 FROM
 (
-SELECT   a.sourcenumber,
+SELECT   to_char(current_date - interval '1 day','YYYY-MM-DD') as datekey,
+         a.sourcenumber,
          count(a.guid) as calls,
-         count(destinationnumber) as spread,
+         count(distinct destinationnumber) as spread,
          sum(duration/1000) as sum_duration,
          avg(duration/1000) as avg_duration
 FROM     master.flowstart a LEFT OUTER JOIN master.flowend b ON a.guid=b.guid
@@ -43,7 +44,7 @@ WHERE calls &gt; $calls_token$ AND
       spread &gt; $spread_token$ AND 
       avg_duration &lt; $duration_token$
 " shortnames=t 
-| table sourcenumber calls spread sum_duration avg_duration
+| table datekey sourcenumber calls spread sum_duration avg_duration
 | sort avg_duration</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
