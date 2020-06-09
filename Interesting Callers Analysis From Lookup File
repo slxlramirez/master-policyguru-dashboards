@@ -1,0 +1,151 @@
+<form>
+  <label>Interesting Callers Analysis From Lookup File</label>
+  <fieldset submitButton="false">
+    <input type="text" token="startDate_token">
+      <label>State Date (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End Date (YYYY-MM-DD)</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Unique Callers by Day</title>
+        <search base="cdr">
+          <query>| eval _time=strptime(datekey,"%Y-%m-%d") 
+| timechart span=1d fixedrange=f count(sourcenumber) as sources</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Top Callers (Num Days)</title>
+        <search base="cdr">
+          <query>| eventstats dc(datekey) as days
+| stats count as entries sum(calls) as total_calls sum(spread) as total_spread avg(avg_duration) as avg_avg_duration avg(days) as days by sourcenumber
+| eval perc_days=(entries/days)*100
+| table sourcenumber entries perc_days total_calls total_spread avg_avg_duration
+| sort -total_calls perc_days</query>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">0</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="avg_avg_duration">
+          <option name="precision">1</option>
+        </format>
+        <format type="number" field="perc_days">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>At least 50 calls and at least 2 days</title>
+        <search base="cdr">
+          <query>| eval perc_spread = (spread/calls)*100
+| stats avg(perc_spread) as avg_perc_spread sum(calls) as calls count as entries by sourcenumber 
+| search calls &gt; 50 AND entries&gt;=2
+| sort -avg_perc_spread</query>
+        </search>
+        <option name="drilldown">none</option>
+        <format type="number" field="avg_perc_spread">
+          <option name="precision">1</option>
+          <option name="unit">%</option>
+        </format>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>| inputlookup interesting_sip_sources_inbound_daily.csv
+| dedup datekey sourcenumber calls spread sum_duration avg_duration
+| table datekey sourcenumber calls spread sum_duration avg_duration</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
