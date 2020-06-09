@@ -1,0 +1,256 @@
+<form>
+  <label>Data Analyis Inbound Destination Between Two Dates (PolicyGuru Direct)</label>
+  <fieldset submitButton="true">
+    <input type="text" token="phoneNumber_token">
+      <label>Destination Number (+1 format)</label>
+    </input>
+    <input type="text" token="startTime_token">
+      <label>Start Time (YYYY-MM-DD hh24:mi:ss)</label>
+    </input>
+    <input type="text" token="endTime_token">
+      <label>End Time (YYYY-MM-DD hh24:mi:ss)</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>by 15min for Provided Interval</title>
+        <search base="cdr">
+          <query>| eval _time=strptime(flowtime_ts_gmt,"%Y-%m-%d %H:%M:%S")
+| timechart span=15m count by policydisposition fixedrange=false</query>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>by sip call type at 15s buckets</title>
+        <search base="cdrsip">
+          <query>| eval _time=strptime(flowtime_ts_gmt,"%Y-%m-%d %H:%M:%S")
+| timechart span=15m count by calltype fixedrange=false</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>by destination by calltype</title>
+        <search base="cdrsip">
+          <query>| stats count by destinationnumber calltype | sort -count</query>
+        </search>
+        <option name="drilldown">cell</option>
+        <drilldown>
+          <link target="_blank">/app/search/destinationnumber_cdr_sip_no_manual_run?destinationNumber=$click.value$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <search base="cdrsip">
+          <query>| bin dur_sec bins=5
+| stats count(flowtime_ts_gmt) as calls by dur_sec
+| sort -calls</query>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>by Day Last 90 (aggregated data)</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="bi_db_1" 
+timeout=1800 query="
+SELECT 
+      to_char(flowtime_t,'YYYY-MM-DD') as flowtime_t,
+      policydisposition,
+      count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= current_date - interval '90 day' AND
+       CASE
+         WHEN LEFT(destinationnumber,1) = '+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END = '$phoneNumber_token$'
+GROUP BY to_char(flowtime_t,'YYYY-MM-DD'), policydisposition
+ORDER BY to_char(flowtime_t,'YYYY-MM-DD')
+" shortnames=t
+| eval _time=strptime(flowtime_t,"%Y-%m-%d")
+| timechart span=1d sum(calls) by policydisposition</query>
+          <earliest>-90d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>by Second Max, Min, Average</title>
+        <search base="cdr">
+          <query>| stats count by flowtime_ts_gmt
+| stats max(count) as max min(count) as min avg(count) as average</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+        <format type="number" field="average">
+          <option name="precision">1</option>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top 10 Sources Calling</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber
+| sort -count
+| head 10
+| join type=left sourcenumber
+[
+| dbxquery 
+connection="bi_db_1" 
+timeout=1800 query="
+SELECT list_name, value_original as sourcenumber
+FROM   pg_directory
+"
+]
+| table sourcenumber list_name count
+| sort -count</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>by Routername</title>
+        <search base="cdr">
+          <query>| stats count by routername
+| sort -count
+| head 10</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>PolicyGuru CDR</title>
+        <search id="cdr">
+          <query>| dbxquery 
+maxrows=250000
+connection="local_ngp" 
+timeout=1800 query="
+SELECT  to_timestamp(a.flowtime/1000) at time zone 'CST6CDT' as flowtime_ts_cst6cdt,
+       to_timestamp(a.flowtime/1000) at time zone 'GMT' as flowtime_ts_gmt,
+       CASE
+         WHEN LEFT(sourcenumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||sourcenumber
+         WHEN LEFT(sourcenumber,1) =  '+' AND LENGTH(sourcenumber)=11 THEN '+1'||RIGHT(sourcenumber,10)
+         WHEN LEFT(sourcenumber,1) =  '1' AND LENGTH(sourcenumber)=11 THEN '+'||sourcenumber
+         ELSE sourcenumber
+       END as sourcenumber,
+       a.sourceregion,
+       CASE  
+         WHEN LEFT(destinationnumber,1) &lt;&gt; '+' AND LENGTH(sourcenumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) = '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) = '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END as destinationnumber,
+       a.destinationregion,
+       CASE a.direction
+        WHEN 1 THEN 'INBOUND'
+        ELSE 'OUTBOUND'
+       END as direction,
+       a.routername,
+       CASE b.policydisposition
+         WHEN 0 THEN 'UNKNOWN'
+         WHEN 1 THEN 'ALLOWED'
+         WHEN 2 THEN 'TERMINATED'
+         WHEN 3 THEN 'REDIRECTED'
+         WHEN 4 THEN 'TRANSFERRED'
+         WHEN 5 THEN 'UNANSWERED'
+         WHEN 6 THEN 'EXPIRED'
+         ELSE b.policydisposition::varchar
+       END as policydisposition,
+       b.ruleid
+FROM     master.flowstart a LEFT OUTER JOIN master.policyflowdetails b ON a.guid=b.guid
+WHERE    a.routername LIKE 'enum%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$' + INTERVAL '15 minutes') * 1000)::bigint AND
+         CASE
+         WHEN LEFT(destinationnumber,1) &lt;&gt;'+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END = '$phoneNumber_token$'
+" shortnames=t
+| table flowtime_ts_cst6cdt flowtime_ts_gmt sourcenumber sourceregion destinationnumber destinationregion routername direction policydisposition ruleid
+| sort 0 flowtime_ts_cst6cdt</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR (SIP data)</title>
+        <search id="cdrsip">
+          <query>| dbxquery 
+maxrows=250000
+connection="local_ngp" 
+timeout=1800 query="
+SELECT   to_timestamp(a.flowtime/1000) at time zone 'GMT' as flowtime_ts_gmt,
+         a.sourcenumber,
+         a.destinationnumber,
+         REPLACE((b.meta::json-&gt;'callDispositions')::varchar,'\"','') as calltype,
+         ROUND(COALESCE(duration::numeric,0)/1000) as dur_sec
+FROM     master.flowstart a INNER JOIN master.flowend b ON a.guid=b.guid
+WHERE    a.routername LIKE 'sip%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$' + INTERVAL '15 minutes') * 1000)::bigint AND
+         CASE
+         WHEN LEFT(destinationnumber,1) &lt;&gt; '+' AND LENGTH(destinationnumber)=10 THEN '+1'||destinationnumber
+         WHEN LEFT(destinationnumber,1) =  '+' AND LENGTH(destinationnumber)=11 THEN '+1'||RIGHT(destinationnumber,10)
+         WHEN LEFT(destinationnumber,1) =  '1' AND LENGTH(destinationnumber)=11 THEN '+'||destinationnumber
+         ELSE destinationnumber
+       END = '$phoneNumber_token$'
+" shortnames=t
+| table flowtime_ts_gmt sourcenumber destinationnumber calltype dur_sec</query>
+          <earliest>$earliest$</earliest>
+          <latest>$latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
