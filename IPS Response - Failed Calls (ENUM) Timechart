@@ -1,0 +1,59 @@
+<form>
+  <label>IPS Response - Failed Calls (ENUM) Timechart</label>
+  <fieldset submitButton="false" autoRun="false">
+    <input type="text" token="numDays_token">
+      <label>Number of Days Back</label>
+      <default>1</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Unique Sources | Unique Destinations</title>
+        <search>
+          <query>| dbxquery 
+connection="local_ngp" 
+timeout=1800 query="
+SELECT   s.bucket,
+         s.calls as failed_calls,
+         t.calls as terminated_calls
+FROM
+(
+SELECT   to_char(to_timestamp(floor((extract('epoch' from to_timestamp(a.analyticstime/1000)) / 900 )) * 900),'YYYY-MM-DD hh24:mi:ss') as bucket,
+         REPLACE((meta::json-&gt;'callDispositions')::varchar,'\"','') as calldispositions,
+         count(guid) as calls
+FROM     master.flowend a
+WHERE    a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '$numDays_token$ DAYS') * 1000)::bigint AND
+         REPLACE((meta::json-&gt;'callDispositions')::varchar,'\"','') = 'FAILED'
+GROUP BY to_char(to_timestamp(floor((extract('epoch' from to_timestamp(a.analyticstime/1000)) / 900 )) * 900),'YYYY-MM-DD hh24:mi:ss'),
+         REPLACE((meta::json-&gt;'callDispositions')::varchar,'\"','')
+ORDER BY to_char(to_timestamp(floor((extract('epoch' from to_timestamp(a.analyticstime/1000)) / 900 )) * 900),'YYYY-MM-DD hh24:mi:ss'),
+         REPLACE((meta::json-&gt;'callDispositions')::varchar,'\"','')
+) s LEFT OUTER JOIN
+(
+SELECT   to_char(to_timestamp(floor((extract('epoch' from to_timestamp(a.analyticstime/1000)) / 900 )) * 900),'YYYY-MM-DD hh24:mi:ss') as bucket,
+         CASE WHEN policydisposition=2 THEN 'TERMINATED' END as policydisposition,
+         count(guid) as calls
+FROM     master.policyflowdetails a
+WHERE    a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '1 DAYS') * 1000)::bigint AND
+         policydisposition = 2
+GROUP BY to_char(to_timestamp(floor((extract('epoch' from to_timestamp(a.analyticstime/1000)) / 900 )) * 900),'YYYY-MM-DD hh24:mi:ss'),
+         policydisposition
+ORDER BY to_char(to_timestamp(floor((extract('epoch' from to_timestamp(a.analyticstime/1000)) / 900 )) * 900),'YYYY-MM-DD hh24:mi:ss'),
+         policydisposition
+) t ON s.bucket=t.bucket  
+" shortnames=t
+| table *
+| eval _time=strptime(bucket,"%Y-%m-%d %H:%M:%S")
+| timechart fixedrange=f span=15m sum(failed_calls) as failed_calls sum(terminated_calls) as terminated_calls</query>
+          <earliest>$earliest$</earliest>
+          <latest>$latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">preview</option>
+      </chart>
+    </panel>
+  </row>
+</form>
