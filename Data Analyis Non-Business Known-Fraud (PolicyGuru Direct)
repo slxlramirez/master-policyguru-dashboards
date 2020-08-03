@@ -1,0 +1,204 @@
+<form>
+  <label>Data Analyis Non-Business Known-Fraud (PolicyGuru Direct)</label>
+  <fieldset submitButton="true">
+    <input type="dropdown" token="direction_token">
+      <label>Direction</label>
+      <choice value="1">Inbound</choice>
+      <choice value="2">Outbound</choice>
+      <choice value="3">Both</choice>
+    </input>
+    <input type="text" token="startTime_token">
+      <label>Start Time (YYYY-MM-DD hh24:mi:ss)</label>
+    </input>
+    <input type="text" token="endTime_token">
+      <label>End Time (YYYY-MM-DD hh24:mi:ss)</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>By Disposition</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   policydisposition,
+         CASE 
+             WHEN ruleid LIKE '%InB_Termination_EnterpriseWide%' THEN calls 
+             ELSE 0
+         END as InB_Termination_EnterpriseWide,
+         CASE 
+             WHEN ruleid = 'noguid_allow_case' THEN calls 
+             ELSE 0
+         END as Default_Allow
+FROM
+(
+SELECT   CASE b.policydisposition
+          WHEN 0 THEN 'UNKNOWN'
+          WHEN 1 THEN 'ALLOWED'
+          WHEN 2 THEN 'TERMINATED'
+          WHEN 3 THEN 'REDIRECTED'
+          WHEN 4 THEN 'TRANSFERRED'
+          WHEN 5 THEN 'UNANSWERED'
+          WHEN 6 THEN 'EXPIRED'
+          ELSE b.policydisposition::varchar
+         END as policydisposition,
+         ruleid,
+         COUNT(b.guid) as calls 
+FROM     master.flowstart a LEFT OUTER JOIN master.policyflowdetails b ON a.guid=b.guid
+WHERE    a.routername LIKE 'enum%' AND
+         CASE 
+            WHEN $direction_token$=1 AND a.direction = 1 THEN 1
+            WHEN $direction_token$=2 AND a.direction = 2 THEN 1
+            WHEN $direction_token$=3 THEN 1
+            ELSE 0
+         END=1 AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint
+GROUP BY CASE b.policydisposition
+          WHEN 0 THEN 'UNKNOWN'
+          WHEN 1 THEN 'ALLOWED'
+          WHEN 2 THEN 'TERMINATED'
+          WHEN 3 THEN 'REDIRECTED'
+          WHEN 4 THEN 'TRANSFERRED'
+          WHEN 5 THEN 'UNANSWERED'
+          WHEN 6 THEN 'EXPIRED'
+          ELSE b.policydisposition::varchar
+         END,
+         ruleid
+ORDER BY CASE b.policydisposition
+          WHEN 0 THEN 'UNKNOWN'
+          WHEN 1 THEN 'ALLOWED'
+          WHEN 2 THEN 'TERMINATED'
+          WHEN 3 THEN 'REDIRECTED'
+          WHEN 4 THEN 'TRANSFERRED'
+          WHEN 5 THEN 'UNANSWERED'
+          WHEN 6 THEN 'EXPIRED'
+          ELSE b.policydisposition::varchar
+         END,
+         ruleid
+) foo
+GROUP BY policydisposition, ruleid, calls
+" shortnames=t
+| table policydisposition inb_termination_enterprisewide default_allow
+| addcoltotals
+| fillnull policydisposition value="Grand Total"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>By Country</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   sourceregion,
+         COUNT(b.guid) as calls 
+FROM     master.flowstart a LEFT OUTER JOIN master.policyflowdetails b ON a.guid=b.guid
+WHERE    a.routername LIKE 'enum%' AND
+         CASE 
+            WHEN $direction_token$=1 AND a.direction = 1 THEN 1
+            WHEN $direction_token$=2 AND a.direction = 2 THEN 1
+            WHEN $direction_token$=3 THEN 1
+            ELSE 0
+         END=1 AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint AND
+         sourceregion NOT IN ('United States')
+GROUP BY sourceregion
+ORDER BY sourceregion
+" shortnames=t
+| table sourceregion calls
+| sort -calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <map>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   sourceregion,
+         COUNT(b.guid) as calls 
+FROM     master.flowstart a LEFT OUTER JOIN master.policyflowdetails b ON a.guid=b.guid
+WHERE    a.routername LIKE 'enum%' AND
+         CASE 
+            WHEN $direction_token$=1 AND a.direction = 1 THEN 1
+            WHEN $direction_token$=2 AND a.direction = 2 THEN 1
+            WHEN $direction_token$=3 THEN 1
+            ELSE 0
+         END=1 AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint AND
+         sourceregion NOT IN ('United States')
+GROUP BY sourceregion
+ORDER BY sourceregion
+" shortnames=t
+| table sourceregion calls
+| rename sourceregion as "featureId"
+| geom geo_countries</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="mapping.type">choropleth</option>
+        <option name="refresh.display">progressbar</option>
+      </map>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Call Trend by Location</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD') as datekey,
+         sourceregion,
+         COUNT(b.guid) as calls 
+FROM     master.flowstart a LEFT OUTER JOIN master.policyflowdetails b ON a.guid=b.guid
+WHERE    a.routername LIKE 'enum%' AND
+         CASE 
+            WHEN $direction_token$=1 AND a.direction = 1 THEN 1
+            WHEN $direction_token$=2 AND a.direction = 2 THEN 1
+            WHEN $direction_token$=3 THEN 1
+            ELSE 0
+         END=1 AND
+         a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND
+         a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$') * 1000)::bigint AND
+         sourceregion NOT IN ('United States')
+GROUP BY to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD'), sourceregion
+ORDER BY to_char(to_timestamp(a.flowtime/1000),'YYYY-MM-DD'), sourceregion
+" shortnames=t
+| table sourceregion datekey calls
+| sort -calls
+| eval _time=strptime(datekey,"%Y-%m-%d") 
+| timechart fixedrange=f span=1d sum(calls) as calls by sourceregion</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</form>
