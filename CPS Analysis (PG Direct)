@@ -1,0 +1,80 @@
+<dashboard>
+  <label>CPS Analysis (PG Direct)</label>
+  <row>
+    <panel>
+      <chart>
+        <title>MAX CPS by Hour (ENUM)</title>
+        <search>
+          <query>| dbxquery 
+connection="bi_db_1" 
+timeout=1800 query="
+SELECT hourkey, 
+       MAX(calls) as max_cps
+FROM
+(
+SELECT to_char(flowtime_t,'YYYY-MM-DD hh24') as hourkey,
+       flowtime_t,
+       count(guid) as calls
+FROM   pg_fs_pfd_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)
+GROUP BY to_char(flowtime_t,'YYYY-MM-DD hh24'),flowtime_t
+) foo
+GROUP BY hourkey
+" shortnames=t
+| table hourkey max_cps
+| eval _time=strptime(hourkey,"%Y-%m-%d %H") 
+| timechart fixedrange=f span=1h sum(max_cps) as max_cps</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">/app/search/cps_drilldown?drillDown_hour=$click.value$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>MAX CPS by Hour (SIP)</title>
+        <search>
+          <query>| dbxquery 
+connection="bi_db_1" 
+timeout=1800 query="
+SELECT hourkey, 
+       calldispositions,
+       MAX(calls) as max_cps
+FROM
+(
+SELECT to_char(starttime,'YYYY-MM-DD hh24') as hourkey,
+       calldispositions,
+       starttime,
+       count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
+       datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)
+GROUP BY to_char(starttime,'YYYY-MM-DD hh24'),calldispositions,starttime
+) foo
+GROUP BY hourkey,calldispositions
+" shortnames=t
+| table hourkey calldispositions max_cps
+| eval _time=strptime(hourkey,"%Y-%m-%d %H") 
+| timechart fixedrange=f span=1h sum(max_cps) as max_cps by calldispositions</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>
