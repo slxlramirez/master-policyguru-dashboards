@@ -1,0 +1,131 @@
+<dashboard>
+  <label>CPS Drilldown</label>
+  <row>
+    <panel>
+      <single>
+        <search>
+          <query>| dbxquery 
+connection="bi_db_1" 
+timeout=1800 query="
+SELECT count(guid) as calls
+FROM   pg_fs_fe_cdr
+WHERE  starttime::timestamp &gt;= to_timestamp('$drillDown_hour$'::numeric) AND
+       starttime::timestamp  &lt; to_timestamp(('$drillDown_hour$'::numeric) + 3600)
+" shortnames=t
+| table *</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>by Direction (SIP)</title>
+        <search base="cdrsip">
+          <query>| eval _time=strptime(starttime_t,"%Y-%m-%d %H:%M:%S") 
+| timechart fixedrange=f span=1m count by direction</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Distinct Sources/Destinations</title>
+        <search base="cdrsip">
+          <query>| eval _time=strptime(starttime_t,"%Y-%m-%d %H:%M:%S") 
+| timechart fixedrange=f span=1m dc(sourcenumber) as sources dc(destinationnumber) as destinations</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Calldispositions by Minute</title>
+        <search base="cdrsip">
+          <query>| eval _time=strptime(starttime_t,"%Y-%m-%d %H:%M:%S") 
+| timechart fixedrange=f span=1m count by calldispositions</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Top Sources</title>
+        <search base="cdrsip">
+          <query>| stats count as calls dc(destinationnumber) as spread by sourcenumber list_name
+| sort -calls</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Destinations</title>
+        <search base="cdrsip">
+          <query>| stats count as calls dc(sourcenumber) as spread by destinationnumber
+| sort -calls</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>SIP CDR</title>
+        <search id="cdrsip">
+          <query>| dbxquery 
+connection="bi_db_1" 
+timeout=1800 query="
+SELECT a.*,
+       b.list_name
+FROM
+(
+SELECT datekey,
+       to_char(analyticstime_t,'YYYY-MM-DD hh24:mi:ss') as analyticstime_t,
+       to_char(starttime,'YYYY-MM-DD hh24:mi:ss') as starttime_t,
+       to_char(connecttime,'YYYY-MM-DD hh24:mi:ss') as connecttime_t,
+       to_char(endtime,'YYYY-MM-DD hh24:mi:ss') as endtime_t,
+       sourcenumber,
+       destinationnumber,
+       direction,
+       routername,
+       calldispositions,
+       codecs,
+       duration,
+       offsetms
+FROM   pg_fs_fe_cdr
+WHERE  starttime::timestamp &gt;= to_timestamp('$drillDown_hour$'::numeric) AND
+       starttime::timestamp  &lt; to_timestamp(('$drillDown_hour$'::numeric) + 3600)
+) a LEFT OUTER JOIN
+(
+SELECT * FROM pg_directory
+) b ON a.sourcenumber=b.value_parsed
+" shortnames=t
+| table *</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
