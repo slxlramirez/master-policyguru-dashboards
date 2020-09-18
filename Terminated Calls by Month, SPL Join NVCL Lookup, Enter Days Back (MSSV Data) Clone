@@ -1,0 +1,62 @@
+<form>
+  <label>Terminated Calls by Month, SPL Join NVCL Lookup, Enter Days Back (MSSV Data) Clone</label>
+  <fieldset submitButton="false">
+    <input type="text" token="daysBack_token">
+      <label>Days Back</label>
+      <default>7</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Outbound SIP Calls By 15m (Excl United States)</title>
+        <search base="data">
+          <query>| eval _time=strptime(bucket,"%Y-%m-%d") 
+| timechart span=1mon sum(calls) as calls by rule_new</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Data</title>
+        <search id="data">
+          <query>| dbxquery 
+connection="mssv_db" 
+query="
+SELECT   date_trunc('month',datekey)::date as bucket,
+         sourcenumber,
+         rule,
+         COUNT(guid) as calls
+FROM     pg_fs_pfd_cdr
+WHERE    datekey &gt;= (CURRENT_DATE - INTERVAL '$daysBack_token$ day') AND
+         policydisposition = 'TERMINATED'
+GROUP BY date_trunc('month',datekey)::date, sourcenumber, rule
+" shortnames=t 
+| join type=left sourcenumber
+[
+| inputlookup securelogix_nhcl.csv
+| eval sourcenumber="+".'Country Code'.'Area Code'.'Local Number'
+| rename "Last Name" as last_name
+| table sourcenumber last_name
+]
+| fillnull value=NULL last_name
+| eval rule_new=CASE(last_name="NULL",rule,last_name!="NULL",rule.", ".last_name." (NVCL)")
+| table bucket sourcenumber last_name calls rule rule_new
+| stats sum(calls) as calls by bucket rule_new
+| sort bucket</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>
