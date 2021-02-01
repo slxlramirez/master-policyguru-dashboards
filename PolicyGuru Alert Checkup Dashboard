@@ -1,0 +1,96 @@
+<form>
+  <label>PolicyGuru Alert Checkup Dashboard</label>
+  <fieldset submitButton="true">
+    <input type="time" token="field1">
+      <label></label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Alert - Total Inbound</title>
+        <search base="cdr">
+          <query>| search savedsearch_name="PolicyGuru Alert - Total Inbound Checker 15m*"
+| timechart span=15m count as calls sum(run_time) as run_time by alert_actions</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Alert - Outbound INTL</title>
+        <search base="cdr">
+          <query>| search savedsearch_name="PolicyGuru Alert - Outbound INTL Checker 15m (enum)*"
+| timechart span=15m count as calls sum(run_time) as run_time by alert_actions</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Alert - Same Source</title>
+        <search base="cdr">
+          <query>| search savedsearch_name="PolicyGuru Alert - Same Source Checker 15m (ENUM)"
+| timechart span=15m count as calls sum(run_time) as run_time by alert_actions</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Alert - Total Terminated</title>
+        <search base="cdr">
+          <query>| search savedsearch_name="PolicyGuru Alert - Total InB Terminated Checker 15m"
+| timechart span=5m count as calls sum(run_time) as run_time by alert_actions</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Alert - Same Source incl CallDispositions</title>
+        <search base="cdr">
+          <query>| search savedsearch_name="PolicyGuru Alert - Same Source Checker 15m (ENUM) incl CallDispositions"
+| timechart span=15m count as calls sum(run_time) as run_time by alert_actions</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>index="scheduler" "PolicyGuru Alert" 
+| table _time savedsearch_name run_time status result_count fired alert_actions
+| fillnull value=no_action alert_actions</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
