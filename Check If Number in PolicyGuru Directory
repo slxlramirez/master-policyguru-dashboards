@@ -1,0 +1,27 @@
+<form>
+  <label>Check If Number in PolicyGuru Directory</label>
+  <fieldset submitButton="true">
+    <input type="text" token="number_token">
+      <label>Digits to Search</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <search>
+          <query>| dbxquery 
+timeout=1800 connection="ngp_connection" 
+query="
+SELECT 	b.name, a.value
+FROM 	MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+WHERE 	a.value LIKE '%$number_token$%'
+" shortnames=t
+| table *</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>
