@@ -1,5 +1,5 @@
 <form>
-  <label>Data Analyis Inbound Like Source Between Two Dates (PolicyGuru Direct)</label>
+  <label>Data Analysis Inbound Like Source Between Two Dates (PolicyGuru Direct)</label>
   <fieldset submitButton="true">
     <input type="text" token="sourceNumber_token">
       <label>Source Number (digits only)</label>
