@@ -1,5 +1,5 @@
 <form>
-  <label>Data Analyis Inbound Destination Between Two Dates (PolicyGuru Direct)</label>
+  <label>Data Analysis Inbound Destination Between Two Dates (PolicyGuru Direct)</label>
   <fieldset submitButton="true">
     <input type="text" token="phoneNumber_token">
       <label>Destination Number (+1 format)</label>
