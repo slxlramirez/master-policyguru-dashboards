@@ -1,5 +1,5 @@
 <form>
-  <label>Data Analyis Non-Business Known-Fraud (PolicyGuru Direct)</label>
+  <label>Data Analysis Non-Business Known-Fraud (PolicyGuru Direct)</label>
   <fieldset submitButton="true">
     <input type="dropdown" token="direction_token">
       <label>Direction</label>
