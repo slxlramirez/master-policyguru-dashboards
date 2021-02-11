@@ -1,5 +1,5 @@
 <form>
-  <label>Data Analyis Inbound Between Two Dates With Direction Select (PolicyGuru Direct)</label>
+  <label>Data Analysis Inbound Between Two Dates With Direction Select (PolicyGuru Direct)</label>
   <fieldset submitButton="true">
     <input type="dropdown" token="direction_token">
       <label>Direction</label>
