@@ -1,0 +1,282 @@
+<form theme="light">
+  <label>PolicyGuru Firewall Rules (NVCL Investigation)</label>
+  <fieldset submitButton="true" autoRun="false">
+    <input type="dropdown" token="dataSource_token">
+      <label>Data Source</label>
+      <search>
+        <query/>
+      </search>
+      <fieldForLabel>Name</fieldForLabel>
+      <fieldForValue>Value</fieldForValue>
+      <choice value="ngp_connection">ngp_connection</choice>
+      <default>ngp_connection</default>
+    </input>
+    <input type="text" token="numDays_token">
+      <label>Number Days Back</label>
+      <default>7</default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Directions</title>
+        <search>
+          <query>| makeresults 
+| eval Notes="Select customer to discover their NVCL potential...."
+| append
+[
+| makeresults 
+| eval Notes="It is not 100% trustworthy until we get 'Negative Value' listed in every instance and the SQL updated here"
+]| append
+[
+| makeresults 
+| eval Notes="As it stands now, it could have a false positive if 'Harassers' is in the text"
+]
+| fields - _time</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>NVCL TERM RULE (1+=YES, 2=NO)</title>
+        <search base="cdr">
+          <query>| search name = "*NVCL*" AND action = "TERMINATE"
+| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>NVCL REDIRECT RULE (1+=YES, 2=NO)</title>
+        <search base="cdr">
+          <query>| search name = "*NVCL*" AND action = "REDIRECT"
+| stats count</query>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x555","0x53a051","0x555"]</option>
+        <option name="rangeValues">[0,10]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>NVCL in Whitelist</title>
+        <search base="wl_nvcl_dir">
+          <query>| search nvcl_phonumber != "NULL"
+| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Total Inbound Calls</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   COUNT(a.guid) as calls
+FROM     master.flowstart a
+WHERE    a.routername LIKE 'enum%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint AND
+         a.guid NOT IN 
+         (
+         SELECT guid 
+         FROM   master.policyflowdetails s
+         WHERE  s.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint AND
+                s.policydisposition = 2 
+         )
+" shortnames=t
+| table calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Number NVCL Calls</title>
+        <search base="fw_rules">
+          <query>| search ruleid=*NVCL*
+| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <table>
+        <title>Top 10 NVCL Callers</title>
+        <search>
+          <query>| dbxquery 
+maxrows=250000
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT   sourcenumber,
+         COUNT(a.guid) as calls
+FROM     master.flowstart a
+WHERE    a.routername LIKE 'enum%' AND
+         a.direction = 1 AND
+         a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint AND
+         a.sourcenumber IN 
+         (
+           SELECT  distinct a.value
+           FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+           WHERE   b.name LIKE '%Value%'
+         )
+GROUP BY sourcenumber
+ORDER BY COUNT(a.guid) DESC
+" shortnames=t
+| table sourcenumber calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Whitelist NVCL Directory Lookup</title>
+        <search id="wl_nvcl_dir">
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT  foo.value as whitelist_phonenumber,
+        bar.value as nvcl_phonenumber
+FROM
+(
+SELECT  distinct a.value
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+WHERE   LOWER(b.name) IN ('whitelist','allowlist')
+) foo LEFT OUTER JOIN
+(
+SELECT  distinct a.value
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+WHERE   b.name LIKE '%Value%'
+) bar ON foo.value=bar.value
+" shortnames=t
+| fillnull value=NULL</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Active Rules</title>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="ngp_connection" 
+maxrows=250000
+timeout=1800 
+query="
+SELECT t.*, u.value as dst_value
+FROM
+(
+SELECT x.*, y.value as src_value
+FROM
+(
+SELECT CASE a.action
+        WHEN 0 THEN 'ALLOW'
+        WHEN 1 THEN 'TERMINATE'
+        WHEN 2 THEN 'REDIRECT'
+        ELSE 'OTHER'
+       END as action,
+       actioninfo,
+       destinationlistinggroup_id,
+       CASE a.direction
+         WHEN 1 THEN 'INBOUND'
+         WHEN 2 THEN 'OUTBOUND'
+         ELSE 'OTHER'
+       END as direction,
+       a.id,
+       a.name,
+       sourcelistinggroup_id,
+       b.name as src_name, 
+       c.name as dst_name,
+       CASE 
+         WHEN a.name LIKE '%NVCL%' THEN 1
+         ELSE 0
+       END as nvcl_match
+from ((master.policyrule a LEFT OUTER JOIN master.listinggroup b ON a.sourcelistinggroup_id=b.id)
+       LEFT OUTER JOIN master.listinggroup c ON a.destinationlistinggroup_id=c.id)
+) x LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) y ON x.src_name=y.name
+) t LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) u ON t.dst_name=u.name
+" shortnames=t
+| table id name sourcelistinggroup_id src_name src_value destinationlistinggroup_id dst_name dst_value direction action actioninfo starttime endtime updatedtime nvcl_match
+| table name src_name src_value dst_name dst_value direction action actioninfo nvcl_match
+| sort 0 name 
+|  stats count by name direction src_name dst_name action actioninfo nvcl_match</query>
+          <earliest>$earliest$</earliest>
+          <latest>$latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>FW Rules</title>
+        <search id="fw_rules">
+          <query>| dbxquery 
+connection=ngp_connection
+timeout=1800 
+query="
+         SELECT ruleid,
+                policydisposition,
+                COUNT(guid) as calls
+         FROM   master.policyflowdetails s
+         WHERE  s.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint 
+         GROUP BY ruleid,policydisposition
+         ORDER BY ruleid,policydisposition
+" shortnames=t
+| table ruleid policydisposition calls
+| sort -calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
