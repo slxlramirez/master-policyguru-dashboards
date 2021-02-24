@@ -21,15 +21,15 @@
       <table>
         <title>Directions</title>
         <search>
-          <query>| makeresults 
+          <query>| makeresults
 | eval Notes="Select customer to discover their NVCL potential...."
 | append
 [
-| makeresults 
+| makeresults
 | eval Notes="It is not 100% trustworthy until we get 'Negative Value' listed in every instance and the SQL updated here"
 ]| append
 [
-| makeresults 
+| makeresults
 | eval Notes="As it stands now, it could have a false positive if 'Harassers' is in the text"
 ]
 | fields - _time</query>
@@ -73,7 +73,7 @@
       <single>
         <title>NVCL in Whitelist</title>
         <search base="wl_nvcl_dir">
-          <query>| search nvcl_phonumber != "NULL"
+          <query>| search nvcl_phonenumber != "NULL"
 | stats count</query>
         </search>
         <option name="drilldown">none</option>
@@ -86,21 +86,21 @@
       <single>
         <title>Total Inbound Calls</title>
         <search>
-          <query>| dbxquery 
+          <query>| dbxquery
 maxrows=250000
-connection="ngp_connection" 
+connection="ngp_connection"
 timeout=1800 query="
 SELECT   COUNT(a.guid) as calls
 FROM     master.flowstart a
 WHERE    a.routername LIKE 'enum%' AND
          a.direction = 1 AND
          a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint AND
-         a.guid NOT IN 
+         a.guid NOT IN
          (
-         SELECT guid 
+         SELECT guid
          FROM   master.policyflowdetails s
          WHERE  s.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint AND
-                s.policydisposition = 2 
+                s.policydisposition = 2
          )
 " shortnames=t
 | table calls</query>
@@ -125,10 +125,10 @@ WHERE    a.routername LIKE 'enum%' AND
     <panel>
       <table>
         <title>Top 10 NVCL Callers</title>
-        <search>
-          <query>| dbxquery 
+        <search id="nvcl">
+          <query>| dbxquery
 maxrows=250000
-connection="ngp_connection" 
+connection="ngp_connection"
 timeout=1800 query="
 SELECT   sourcenumber,
          COUNT(a.guid) as calls
@@ -136,7 +136,7 @@ FROM     master.flowstart a
 WHERE    a.routername LIKE 'enum%' AND
          a.direction = 1 AND
          a.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint AND
-         a.sourcenumber IN 
+         a.sourcenumber IN
          (
            SELECT  distinct a.value
            FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
@@ -153,14 +153,23 @@ ORDER BY COUNT(a.guid) DESC
         <option name="refresh.display">progressbar</option>
       </table>
     </panel>
+    <panel>
+      <single>
+        <title>NVCL Total Calls</title>
+        <search base="nvcl">
+          <query>| stats sum(calls)</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
   </row>
   <row>
     <panel>
       <table>
         <title>Whitelist NVCL Directory Lookup</title>
         <search id="wl_nvcl_dir">
-          <query>| dbxquery 
-connection="ngp_connection" 
+          <query>| dbxquery
+connection="ngp_connection"
 timeout=1800 query="
 SELECT  foo.value as whitelist_phonenumber,
         bar.value as nvcl_phonenumber
@@ -190,10 +199,10 @@ WHERE   b.name LIKE '%Value%'
       <table>
         <title>Active Rules</title>
         <search id="cdr">
-          <query>| dbxquery 
-connection="ngp_connection" 
+          <query>| dbxquery
+connection="ngp_connection"
 maxrows=250000
-timeout=1800 
+timeout=1800
 query="
 SELECT t.*, u.value as dst_value
 FROM
@@ -217,9 +226,9 @@ SELECT CASE a.action
        a.id,
        a.name,
        sourcelistinggroup_id,
-       b.name as src_name, 
+       b.name as src_name,
        c.name as dst_name,
-       CASE 
+       CASE
          WHEN a.name LIKE '%NVCL%' THEN 1
          ELSE 0
        END as nvcl_match
@@ -238,7 +247,7 @@ FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.
 " shortnames=t
 | table id name sourcelistinggroup_id src_name src_value destinationlistinggroup_id dst_name dst_value direction action actioninfo starttime endtime updatedtime nvcl_match
 | table name src_name src_value dst_name dst_value direction action actioninfo nvcl_match
-| sort 0 name 
+| sort 0 name
 |  stats count by name direction src_name dst_name action actioninfo nvcl_match</query>
           <earliest>$earliest$</earliest>
           <latest>$latest$</latest>
@@ -257,15 +266,15 @@ FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.
       <table>
         <title>FW Rules</title>
         <search id="fw_rules">
-          <query>| dbxquery 
+          <query>| dbxquery
 connection=ngp_connection
-timeout=1800 
+timeout=1800
 query="
          SELECT ruleid,
                 policydisposition,
                 COUNT(guid) as calls
          FROM   master.policyflowdetails s
-         WHERE  s.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint 
+         WHERE  s.analyticstime &gt;= (extract (epoch from now() - INTERVAL '7 DAY') * 1000)::bigint
          GROUP BY ruleid,policydisposition
          ORDER BY ruleid,policydisposition
 " shortnames=t
