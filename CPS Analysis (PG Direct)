@@ -12,18 +12,18 @@ SELECT hourkey,
        MAX(calls) as max_cps
 FROM
 (
-SELECT to_char(flowtime_t,'YYYY-MM-DD hh24') as hourkey,
+SELECT to_char(flowtime_t,'YYYY-MM-DD hh24:mi:ss') as hourkey,
        flowtime_t,
        count(guid) as calls
 FROM   pg_fs_pfd_cdr
 WHERE  datekey &gt;= CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int) - 7 AND
        datekey  &lt; CURRENT_DATE - CAST(EXTRACT(DOW FROM CURRENT_DATE) as int)
-GROUP BY to_char(flowtime_t,'YYYY-MM-DD hh24'),flowtime_t
+GROUP BY to_char(flowtime_t,'YYYY-MM-DD hh24:mi:ss'),flowtime_t
 ) foo
 GROUP BY hourkey
 " shortnames=t
 | table hourkey max_cps
-| eval _time=strptime(hourkey,"%Y-%m-%d %H") 
+| eval _time=strptime(hourkey,"%Y-%m-%d %H:%M:%S") 
 | timechart fixedrange=f span=1h sum(max_cps) as max_cps</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
