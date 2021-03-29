@@ -1,0 +1,271 @@
+<dashboard>
+  <label>PolicyGuru Sales Dashboard - A Year in Review (MSSV DB)</label>
+  <row>
+    <panel>
+      <table>
+        <title>Firewall Rules</title>
+        <search id="fw_rules">
+          <query>| dbxquery 
+connection="ngp_connection"
+maxrows=250000
+timeout=1800 
+query="
+SELECT 
+       t.*, u.value as dst_value
+FROM
+(
+SELECT x.*, y.value as src_value
+FROM
+(
+SELECT CASE a.action
+        WHEN 0 THEN 'ALLOW'
+        WHEN 1 THEN 'TERMINATE'
+        WHEN 2 THEN 'REDIRECT'
+        ELSE 'OTHER'
+       END as action,
+       actioninfo,
+       destinationlistinggroup_id,
+       CASE a.direction
+         WHEN 1 THEN 'INBOUND'
+         WHEN 2 THEN 'OUTBOUND'
+         ELSE 'OTHER'
+       END as direction,
+       a.id,
+       a.name,
+       sourcelistinggroup_id,
+       b.name as src_name, 
+       c.name as dst_name
+from ((master.policyrule a LEFT OUTER JOIN master.listinggroup b ON a.sourcelistinggroup_id=b.id)
+       LEFT OUTER JOIN master.listinggroup c ON a.destinationlistinggroup_id=c.id)
+) x LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) y ON x.src_name=y.name
+) t LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) u ON t.dst_name=u.name
+WHERE action IN ('TERMINATE','ALLOW')
+" shortnames=t
+| table id name sourcelistinggroup_id src_name src_value destinationlistinggroup_id dst_name dst_value direction action actioninfo starttime endtime updatedtime
+| table name src_name src_value dst_name dst_value direction action actioninfo
+| sort 0 name 
+| stats count by name direction src_name dst_name action actioninfo
+| table name direction action</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>IPS Rules</title>
+        <search id="ips_rules">
+          <query>index="scheduler" "PolicyGuru Alert*" NOT "*Warning*" NOT "*Predict*"
+| table _time savedsearch_name run_time
+| stats count by savedsearch_name
+| fields - count
+| sort savedsearch_name
+| rename savedsearch_name as "IPS Alert"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Terminated by Month</title>
+        <search base="fw_hits">
+          <query>| stats SUM(calls) as calls by datekey
+| sort  -datekey</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Calls by Firewall Policy and Rule</title>
+        <search base="fw_hits">
+          <query>| stats SUM(calls) as calls by ruleid
+| sort  -calls</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>FW HITS BY MONTH</title>
+        <search id="fw_hits">
+          <query>| dbxquery 
+connection="mssv_db" 
+query="
+SELECT TO_CHAR(datekey,'YYYY-MM') as datekey,
+       rule as ruleid,
+       COUNT(guid) as calls
+FROM   pg_fs_pfd_cdr a
+WHERE 
+       policydisposition = 'TERMINATED' AND
+       datekey &gt;= current_date - interval '13 month'AND
+       datekey  &lt; current_date
+GROUP BY TO_CHAR(datekey,'YYYY-MM'), rule
+" shortnames=t 
+| table datekey ruleid calls</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>NVCL Allowed Calls</title>
+        <search base="nvcl_calls">
+          <query>| search term_status="ALLOWED"
+| stats SUM(calls) as calls by datekey
+| sort datekey</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>NVCL Terminated Calls</title>
+        <search base="nvcl_calls">
+          <query>| search term_status="TERMINATED"
+| stats SUM(calls) as calls by datekey
+| sort datekey</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>NVCL Calls</title>
+        <search id="nvcl_calls">
+          <query>| dbxquery 
+connection="mssv_db" 
+query="
+SELECT TO_CHAR(datekey,'YYYY-MM') as datekey,
+       sourcenumber as source,
+       policydisposition as term_status,
+       COUNT(guid) as calls
+FROM   pg_fs_pfd_cdr a
+WHERE  sourcenumber IN
+(
+SELECT value_original
+FROM   pg_directory
+WHERE  list_name LIKE '%HCL%'
+) AND
+       datekey &gt;= current_date - interval '13 month'AND
+       datekey  &lt; current_date
+GROUP BY TO_CHAR(datekey,'YYYY-MM'), sourcenumber, policydisposition
+" shortnames=t 
+| table datekey source term_status calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Redirection Plans</title>
+        <search>
+          <query>| dbxquery 
+connection="ngp_connection"
+maxrows=250000
+timeout=1800 
+query="
+SELECT 
+       t.*, u.value as dst_value
+FROM
+(
+SELECT x.*, y.value as src_value
+FROM
+(
+SELECT CASE a.action
+        WHEN 0 THEN 'ALLOW'
+        WHEN 1 THEN 'TERMINATE'
+        WHEN 2 THEN 'REDIRECT'
+        ELSE 'OTHER'
+       END as action,
+       actioninfo,
+       destinationlistinggroup_id,
+       CASE a.direction
+         WHEN 1 THEN 'INBOUND'
+         WHEN 2 THEN 'OUTBOUND'
+         ELSE 'OTHER'
+       END as direction,
+       a.id,
+       a.name,
+       sourcelistinggroup_id,
+       b.name as src_name, 
+       c.name as dst_name
+from ((master.policyrule a LEFT OUTER JOIN master.listinggroup b ON a.sourcelistinggroup_id=b.id)
+       LEFT OUTER JOIN master.listinggroup c ON a.destinationlistinggroup_id=c.id)
+) x LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) y ON x.src_name=y.name
+) t LEFT OUTER JOIN
+(
+SELECT  a.value, b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+) u ON t.dst_name=u.name
+WHERE action = 'REDIRECT'
+" shortnames=t
+| table id name sourcelistinggroup_id src_name src_value destinationlistinggroup_id dst_name dst_value direction action actioninfo starttime endtime updatedtime
+| table name src_name src_value dst_name dst_value direction action actioninfo
+| sort 0 name 
+| stats count by name direction src_name dst_name action actioninfo
+| table name direction action</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Pending Scheduled Reports</title>
+        <search>
+          <query>index="scheduler" savedsearch_name="*Report*" NOT "*Same Source*" NOT "instrumentation*"
+| table _time user savedsearch_name status scheduled_time run_time result_count 
+| stats count by savedsearch_name 
+| sort -count
+| fields - count</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
