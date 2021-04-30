@@ -1,0 +1,56 @@
+<form>
+  <label>PolicyGuru Directory Drop Down List Names</label>
+  <fieldset submitButton="false">
+    <input type="dropdown" token="listName_token">
+      <label>List Name</label>
+      <fieldForLabel>name</fieldForLabel>
+      <fieldForValue>name</fieldForValue>
+      <search>
+        <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT  distinct b.name
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+" shortnames=t
+| sort name</query>
+        <earliest>0</earliest>
+        <latest></latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Total Numbers on the List</title>
+        <search base="cdr">
+          <query>| stats Count</query>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <search id="cdr">
+          <query>| dbxquery 
+connection="ngp_connection" 
+timeout=1800 query="
+SELECT  b.name, a.value
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+WHERE   b.name = '$listName_token$'
+" shortnames=t
+| table name value
+| sort name value
+| rename name as "Name" value as "Value"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
