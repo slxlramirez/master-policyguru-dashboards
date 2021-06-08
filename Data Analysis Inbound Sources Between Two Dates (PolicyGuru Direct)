@@ -2,7 +2,7 @@
   <label>Data Analysis Inbound Sources Between Two Dates (PolicyGuru Direct)</label>
   <fieldset submitButton="true">
     <input type="text" token="sourceNumber_token">
-      <label>Sourcenumbers with '' and csv</label>
+      <label>Sourcenumbers with ' and csv</label>
     </input>
     <input type="text" token="startTime_token">
       <label>Start Time (YYYY-MM-DD hh24:mi:ss)</label>
@@ -95,7 +95,7 @@
         <search>
           <query>| dbxquery 
 maxrows=250000
-connection="bi_db_1" 
+connection="mssv_db" 
 timeout=1800 query="
 SELECT 
       to_char(flowtime_t,'YYYY-MM-DD') as flowtime_t,
@@ -176,7 +176,7 @@ FROM   pg_directory WHERE list_name LIKE '%BU%'
         <search id="cdr">
           <query>| dbxquery 
 maxrows=250000
-connection="local_ngp" 
+connection="ngp_connection" 
 timeout=1800 query="
 SELECT  to_timestamp(a.flowtime/1000) at time zone 'CST6CDT' as flowtime_ts_cst6cdt,
        to_timestamp(a.flowtime/1000) at time zone 'GMT' as flowtime_ts_gmt,
@@ -235,7 +235,7 @@ WHERE    a.routername LIKE 'enum%' AND
         <search id="cdrsip">
           <query>| dbxquery 
 maxrows=250000
-connection="local_ngp" 
+connection="ngp_connection" 
 timeout=1800 query="
 SELECT   to_timestamp(a.flowtime/1000) at time zone 'GMT' as flowtime_ts_gmt,
          a.sourcenumber,
@@ -249,7 +249,6 @@ SELECT   to_timestamp(a.flowtime/1000) at time zone 'GMT' as flowtime_ts_gmt,
          ROUND(COALESCE(duration::numeric,0)/1000) as dur_sec
 FROM     master.flowstart a INNER JOIN master.flowend b ON a.guid=b.guid
 WHERE    a.routername LIKE 'sip%' AND
-         --a.direction = 1 AND
          a.analyticstime &gt;= (extract ('epoch' from timestamp '$startTime_token$') * 1000)::bigint AND
          a.analyticstime  &lt; (extract ('epoch' from timestamp '$endTime_token$' + INTERVAL '15 minutes') * 1000)::bigint AND
          a.sourcenumber IN ($sourceNumber_token$)
