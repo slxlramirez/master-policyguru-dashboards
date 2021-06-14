@@ -1,0 +1,167 @@
+<form>
+  <label>Inbound Calls From a List - PG - MSSV Data</label>
+  <fieldset submitButton="true">
+    <input type="dropdown" token="dataSource_token">
+      <label>PG Data Source</label>
+      <choice value="navy911">Navy 911</choice>
+      <default>navy911</default>
+      <fieldForLabel>Name</fieldForLabel>
+      <fieldForValue>Value</fieldForValue>
+    </input>
+    <input type="dropdown" token="mssvData_token">
+      <label>MSSV Data Source</label>
+      <choice value="dw_navy911">Navy 911</choice>
+      <default>dw_navy911</default>
+      <fieldForLabel>Name</fieldForLabel>
+      <fieldForValue>Value</fieldForValue>
+    </input>
+    <input type="dropdown" token="listName_token">
+      <label>List</label>
+      <fieldForLabel>name</fieldForLabel>
+      <fieldForValue>value</fieldForValue>
+      <search>
+        <query>| dbxquery 
+connection="navy911" 
+timeout=1800 query="
+SELECT  b.name, ''''||string_agg(a.value, ''',''')||'''' as value
+FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+WHERE   b.type=1
+GROUP BY 1
+" shortnames=t
+| table name value
+| sort name value</query>
+        <earliest>-15m</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="text" token="startDate_token">
+      <label>Start (YYYY-MM-DD)</label>
+    </input>
+    <input type="text" token="endDate_token">
+      <label>End (YYYY-MM-DD)</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Dashboard Notes:</title>
+        <search>
+          <query>| makeresults 
+| eval Notes="This dashboard queries MSSV DB data, however, it uses PG DIRECT for the list" 
+| append 
+[ | makeresults 
+| eval Notes="This is done by querying the PG Directory for standard lists and then creating a csv list that can passed as a parameter" ] 
+| append 
+[ | makeresults 
+| eval Notes="So 'sourcenumber in ('+12101234567','+13451234567') works" ] 
+| append 
+[ | makeresults 
+| eval Notes="This is why you have to select both the production PG data source and the mssv one" ] 
+| append 
+[ | makeresults 
+| eval Notes="This means you can use real-time changes in the PG directory and query the MSSV data" ] 
+| append 
+[ | makeresults 
+| eval Notes="It also means you do not need to aggregate the PG directory into the MSSV one" ] 
+| fields - _time</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>NVCL Hits</title>
+        <search base="cdr">
+          <query>| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Calls by Day</title>
+        <search base="cdr">
+          <query>| eval _time=strptime(flowtime_t_gmt,"%Y-%m-%d %H:%M:%S")
+| timechart span=1d count by policydisposition</query>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <search base="cdr">
+          <query>| stats count by policydisposition
+| eval policydisposition=policydisposition." (".count.")"</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Sources</title>
+        <search base="cdr">
+          <query>| stats count by sourcenumber
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Top Destinations</title>
+        <search base="cdr">
+          <query>| stats count by destinationnumber
+| sort -count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>| dbxquery 
+connection=$mssvData_token$
+timeout=1800 query="
+SELECT  guid,
+        datekey,
+        to_char(flowtime_t at time zone 'GMT','YYYY-MM-DD hh24:mi:ss') as flowtime_t_gmt,
+        sourcenumber,
+        sourceregion,
+        destinationnumber,
+        destinationregion,
+        direction,
+        routername,
+        rule,
+        policydisposition
+FROM    pg_fs_pfd_cdr a
+WHERE   a.direction = 'INBOUND' AND
+        a.sourcenumber IN ($listName_token$) AND
+        a.datekey &gt;= '$startDate_token$'::date AND
+        a.datekey  &lt; '$endDate_token$'::date
+" shortnames=t
+| table*</query>
+          <earliest>-15m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
