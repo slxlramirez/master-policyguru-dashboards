@@ -1,0 +1,35 @@
+<form>
+  <label>IPS Response - Drop in SIP Calls (PG Direct)</label>
+  <fieldset submitButton="false">
+    <input type="text" token="daysBack_token">
+      <label>Days Back</label>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <search>
+          <query>| dbxquery
+connection=ngp_connection
+query="
+SELECT to_date(to_char(to_timestamp(flowtime/1000) at time zone 'GMT','YYYY-MM-DD'),'YYYY-MM-DD') as datekey,
+       COUNT(guid) as calls
+FROM   master.flowstart a
+WHERE  a.routername LIKE 'sip%' AND
+       a.analyticstime &gt;= (extract('epoch' from (CURRENT_DATE - INTERVAL '$daysBack_token$ DAY')) * 1000)::bigint AND
+       a.analyticstime  &lt; (extract('epoch' from (CURRENT_DATE - INTERVAL '0 DAY')) * 1000)::bigint
+GROUP BY to_date(to_char(to_timestamp(flowtime/1000) at time zone 'GMT','YYYY-MM-DD'),'YYYY-MM-DD')
+ORDER BY to_date(to_char(to_timestamp(flowtime/1000) at time zone 'GMT','YYYY-MM-DD'),'YYYY-MM-DD')
+"
+| table *
+| eval _time=strptime(datekey,"%Y-%m-%d") 
+| timechart span=1d sum(calls)</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+</form>
