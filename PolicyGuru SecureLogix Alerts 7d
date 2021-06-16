@@ -1,0 +1,66 @@
+<dashboard>
+  <label>PolicyGuru SecureLogix Alerts 7d</label>
+  <row>
+    <panel>
+      <table>
+        <title>Report Header</title>
+        <search>
+          <query>| dbxquery 
+connection="analytics_db" 
+query="
+SELECT EXTRACT(YEAR from CURRENT_DATE-7)||' Week '||EXTRACT(WEEK from CURRENT_DATE-7)||' PolicyGuru SecureLogix Alerts' as Heading
+" shortnames=t
+| table heading
+| rename heading AS "Report Header"</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Alerts Triggered</title>
+        <search base="cdr">
+          <query>| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <chart>
+        <title>By Alert</title>
+        <search base="cdr">
+          <query>| stats count by alert_name
+| eval alert_name=alert_name." (".count.")"</query>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>index="scheduler" "PolicyGuru Alert" NOT "*incl*"
+| table _time savedsearch_name run_time status result_count fired alert_actions
+| fillnull value=no_action alert_actions
+| rex field=savedsearch_name "- (?&lt;alert_name_a&gt;.*)"
+| rex field=alert_name_a "(?&lt;alert_name_b&gt;.*) -"
+| eval status=if(like(alert_name_a, "%-%"), 1, 0)
+| eval alert_name=CASE(status=0,alert_name_a,status=1,alert_name_b)
+| table _time alert_name run_time result_count fired alert_actions
+| search alert_actions="email"</query>
+          <earliest>-7d@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
