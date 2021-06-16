@@ -1,0 +1,94 @@
+<dashboard>
+  <label>Last 30d SIP Calls by Hour</label>
+  <row>
+    <panel>
+      <chart>
+        <search>
+          <query>| dbxquery
+connection=ngp_connection
+query="
+SELECT
+       TO_CHAR (to_timestamp(a.flowtime/1000) at time zone 'GMT', 'YYYY-MM-DD hh24') as datekey, 
+       COUNT(guid) as calls
+FROM   master.flowstart a
+WHERE  a.routername LIKE 'sip%' AND
+       a.analyticstime &gt;= (extract('epoch' from (CURRENT_DATE - INTERVAL '30 DAY')) * 1000)::bigint AND
+       a.analyticstime  &lt; (extract('epoch' from (CURRENT_DATE + INTERVAL '1 DAY')) * 1000)::bigint
+GROUP BY TO_CHAR (to_timestamp(a.flowtime/1000) at time zone 'GMT', 'YYYY-MM-DD hh24')
+ORDER BY TO_CHAR (to_timestamp(a.flowtime/1000) at time zone 'GMT', 'YYYY-MM-DD hh24')"
+| table *
+| eval _time=strptime(datekey,"%Y-%m-%d %H") 
+| timechart span=1h sum(calls)</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>By Routername</title>
+        <search>
+          <query>| dbxquery
+connection=ngp_connection
+query="
+SELECT TO_CHAR (to_timestamp(a.flowtime/1000) at time zone 'GMT', 'YYYY-MM-DD hh24') as datekey, 
+       a.routername,
+       COUNT(guid) as calls
+FROM   master.flowstart a
+WHERE  a.routername LIKE 'sip%' AND
+       a.analyticstime &gt;= (extract('epoch' from (CURRENT_DATE - INTERVAL '30 DAY')) * 1000)::bigint AND
+       a.analyticstime  &lt; (extract('epoch' from (CURRENT_DATE + INTERVAL '1 DAY')) * 1000)::bigint 
+GROUP BY TO_CHAR (to_timestamp(a.flowtime/1000) at time zone 'GMT', 'YYYY-MM-DD hh24'), routername
+ORDER BY TO_CHAR (to_timestamp(a.flowtime/1000) at time zone 'GMT', 'YYYY-MM-DD hh24'), routername"
+| table *
+| rex field=routername "sip:(?&lt;o1&gt;.*)\.(?&lt;o2&gt;.*)\.(?&lt;o3&gt;.*)\.(?&lt;o4&gt;.*)"
+| eval sip_router_1=o1.".".o2
+| eval sip_router_2=o1.".".o2.".".o3
+| table datekey calls routername sip_router_1 sip_router_2
+| eval _time=strptime(datekey,"%Y-%m-%d %H") 
+| timechart fixedrange=f span=1h sum(calls) by sip_router_1</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>
