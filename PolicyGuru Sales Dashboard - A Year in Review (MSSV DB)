@@ -163,6 +163,7 @@ GROUP BY TO_CHAR(datekey,'YYYY-MM'), rule
         <search id="nvcl_calls">
           <query>| dbxquery 
 connection="mssv_db" 
+timeout=1800
 query="
 SELECT TO_CHAR(datekey,'YYYY-MM') as datekey,
        sourcenumber as source,
