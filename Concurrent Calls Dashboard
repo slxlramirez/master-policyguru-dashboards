@@ -4,9 +4,22 @@
     <panel>
       <chart>
         <search base="cdr">
-          <query>| timechart span=15m sum(calls) fixedrange=f</query>
+          <query>| timechart span=15m max(calls) fixedrange=f</query>
         </search>
         <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Max Concurrency by Day</title>
+        <search base="cdr">
+          <query>| timechart span=1d max(calls) fixedrange=f</query>
+        </search>
+        <option name="charting.chart">column</option>
         <option name="charting.drilldown">none</option>
       </chart>
     </panel>
