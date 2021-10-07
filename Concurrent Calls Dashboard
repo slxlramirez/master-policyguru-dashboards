@@ -1,0 +1,47 @@
+<dashboard>
+  <label>Concurrent Calls Dashboard</label>
+  <row>
+    <panel>
+      <chart>
+        <search base="cdr">
+          <query>| timechart span=15m sum(calls) fixedrange=f</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Runtime for SCHEDULED JOB</title>
+        <search>
+          <query>index="scheduler" "concurrent" 
+| table _time savedsearch_name run_time
+| timechart span=15m sum(run_time) as run_time by savedsearch_name</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <search id="cdr">
+          <query>| inputlookup concurrent_calls_15m_prudential_v2.csv
+| table customer ts calls
+| eval a=strptime(ts,"%Y-%m-%d %H:%M:%S")
+| eval _time=a
+| fields customer _time calls</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
