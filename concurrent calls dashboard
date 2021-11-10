@@ -1,0 +1,76 @@
+<dashboard>
+  <label>Concurrent Calls</label>
+  <row>
+    <panel>
+      <chart>
+        <title>concurrent calls</title>
+        <search base="cdr">
+          <query>| timechart span=15m max(calls) fixedrange=f by report</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Max Concurrency by Day</title>
+        <search base="cdr">
+          <query>| timechart span=1d max(calls) fixedrange=f by report</query>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Runtime for SCHEDULED JOB</title>
+        <search>
+          <query>index="scheduler" "concurrent" 
+| table _time savedsearch_name run_time
+| timechart span=15m sum(run_time) as run_time by savedsearch_name</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <search id="cdr">
+          <query>| inputlookup cc_15m_bdc.csv
+| table customer ts calls
+| eval a=strptime(ts,"%Y-%m-%d %H:%M:%S")
+| eval _time=a
+| fields customer _time calls
+| eval report="cc_15m_bdc"
+| append
+[
+| inputlookup cc_15m_eoc.csv
+| table customer ts calls
+| eval a=strptime(ts,"%Y-%m-%d %H:%M:%S")
+| eval _time=a
+| fields customer _time calls
+| eval report="cc_15m_eoc"
+]</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
