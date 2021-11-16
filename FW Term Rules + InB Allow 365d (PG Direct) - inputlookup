@@ -1,0 +1,183 @@
+<dashboard>
+  <label>FW Term Rules + InB Allow 365d (PG Direct) - inputlookup</label>
+  <row>
+    <panel>
+      <single>
+        <title>Customers With Data</title>
+        <search base="cdr">
+          <query>| stats dc(CUSTOMER)</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Customers Terminating Calls</title>
+        <search base="cdr">
+          <query>|  search DISPOSITION="TERMINATED"
+| stats dc(CUSTOMER)</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>% Threatening Calls</title>
+        <search base="cdr">
+          <query>| stats sum(CALLS) as calls by DISPOSITION
+| eventstats sum(calls) as "totalCount"
+| eval perc_total = ROUND((calls/totalCount)*100,1)
+| search DISPOSITION="TERMINATED"
+| fields - calls totalCount DISPOSITION</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Total Inbound Allowed</title>
+        <search base="cdr">
+          <query>| search DISPOSITION="ALLOW"
+| stats sum(CALLS) as calls</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Threatening Calls Blocked per Year</title>
+        <search base="cdr">
+          <query>| search DISPOSITION="TERMINATED"
+| stats sum(CALLS) as calls</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Attacks &amp; Suspicious Blocked/yr per Customer</title>
+        <search base="cdr">
+          <query>| search DISPOSITION="TERMINATED"
+| stats dc(CUSTOMER) as customers sum(CALLS) as total
+| eval avg=ROUND(total/customers,0)
+| table avg</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <single>
+        <title>Fraud Related Attacks Blocked/yr per Customer</title>
+        <search base="cdr">
+          <query>| search DISPOSITION="TERMINATED"
+| search LAST_NAME="FRAUD"
+| stats  dc(CUSTOMER) as customers sum(CALLS) as total
+| eval avg=ROUND(total/customers,0)
+| table avg</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Fraud, Scam, Social Eng Calls Blocked</title>
+        <search base="cdr">
+          <query>| search DISPOSITION="TERMINATED"
+| eventstats sum(CALLS) as "TOTAL_COUNT"
+| where LAST_NAME in ("Fraud","Debt Collector","Fax Spammer","No Value Caller","Non-Profit","Non-profit","Spammer")
+| eventstats sum(CALLS) as "REDLIST_COUNT"
+| fields REDLIST_COUNT TOTAL_COUNT
+| head 1
+| eval total=ROUND((REDLIST_COUNT/TOTAL_COUNT)*100,1)
+| fields total</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>No Value Callers Blocked/yr per Customer</title>
+        <search base="cdr">
+          <query>| search DISPOSITION="TERMINATED"
+| search LAST_NAME="No Value Caller"
+| stats  dc(CUSTOMER) as customers sum(CALLS) as total
+| eval avg=ROUND(total/customers,0)
+| table avg</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Terminated Months, Rule and Totals</title>
+        <search base="cdr">
+          <query>| stats dc(RULE_COMMENTS) as term_rules dc(THEDATE) as term_months sum(CALLS) as term_calls by CUSTOMER</query>
+        </search>
+        <option name="charting.chart">bubble</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Calls by Monthy by Disposition</title>
+        <search base="cdr">
+          <query>| rename THEDATE as datekey
+| stats sum(CALLS) as calls by datekey DISPOSITION
+| eval datekey=datekey."-01"
+| eval _time=strptime(datekey,"%Y-%m-%d")
+| sort datekey
+| timechart sum(calls) as calls by DISPOSITION span=1mon fixedrange=true</query>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>All Rules All Customers</title>
+        <search base="cdr">
+          <query>| stats sum(CALLS) as CALLS by RULE_COMMENTS
+| sort RULE_COMMENTS</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>CDR</title>
+        <search id="cdr">
+          <query>| inputlookup fw_rules_terminated_365d_pg.csv
+| table CUSTOMER THEDATE RULE_COMMENTS LAST_NAME DISPOSITION CALLS</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>
