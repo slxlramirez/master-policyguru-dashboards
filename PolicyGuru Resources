@@ -1,0 +1,326 @@
+<form theme="dark">
+  <label>PolicyGuru Resources</label>
+  <fieldset submitButton="true">
+    <input type="checkbox" token="dc_token">
+      <label>Data Center</label>
+      <choice value="BDC">BDC</choice>
+      <choice value="HDC">HDC</choice>
+      <default>BDC,HDC</default>
+      <initialValue>BDC,HDC</initialValue>
+      <valuePrefix>site=</valuePrefix>
+      <delimiter> OR </delimiter>
+    </input>
+    <input type="checkbox" token="device_token">
+      <label>Device</label>
+      <default>Database,Mediation,Probe</default>
+      <initialValue>Database,Mediation,Probe</initialValue>
+      <valuePrefix>device=</valuePrefix>
+      <delimiter> OR </delimiter>
+      <fieldForLabel>device</fieldForLabel>
+      <fieldForValue>device</fieldForValue>
+      <search>
+        <query>| inputlookup ghc-sysmon-lookup.csv
+| table device
+| dedup device
+| sort device</query>
+        <earliest>-15m</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="dropdown" token="host_token">
+      <label>ip or host?</label>
+      <choice value="host">host</choice>
+      <choice value="ipaddress">ip</choice>
+      <default>host</default>
+      <fieldForLabel>Name</fieldForLabel>
+      <fieldForValue>Value</fieldForValue>
+    </input>
+    <input type="dropdown" token="tc_token">
+      <label>timechart grouping</label>
+      <choice value="5m">5m</choice>
+      <choice value="15m">15m</choice>
+      <choice value="1h">1h</choice>
+      <choice value="8h">8h</choice>
+      <choice value="1d">1d</choice>
+      <default>5m</default>
+      <initialValue>5m</initialValue>
+    </input>
+    <input type="time" token="field1">
+      <label></label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Mediation Server Queues</title>
+        <search base="ms_cdr">
+          <query>| timechart span=$tc_token$ max(flowDataChannel-mc) as flowDataChannel-mc max(privateFlowEventChannel-mc) as privateFlowEventChannel-mc max(privateSipEventChannel-mc) as privateSipEventChannel-mc max(probeSipFlowDataChannel-mc) as probeSipFlowDataChannel-mc by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Message Queue</title>
+        <search base="pg_cdr">
+          <query>| timechart span=$tc_token$ max(message-count) as mc by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.text">message-count</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Msg Queue</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Messages Added Queue</title>
+        <search base="pg_cdr">
+          <query>| timechart span=$tc_token$ max(messages-added) as mc by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Msgs Added</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Load</title>
+        <search base="vmstat_cdr">
+          <query>| timechart span=$tc_token$ max(loadAvg1mi) as loadAvg by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Memory</title>
+        <search base="vmstat_cdr">
+          <query>| timechart span=$tc_token$ max(memUsedPct) as perc_used_mbytes fixedrange=f by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">% Used</option>
+        <option name="charting.axisY.maximumNumber">100</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>CPU</title>
+        <search base="cpu_cdr">
+          <query>| timechart span=$tc_token$ max(cpu_load_percent) as cpu_load_percent by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">Load %</option>
+        <option name="charting.axisY.maximumNumber">100</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Processes</title>
+        <search base="vmstat_cdr">
+          <query>| timechart span=$tc_token$ max(processes) as processes by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Bandwidth</title>
+        <search base="bandwidth_cdr">
+          <query>| timechart span=$tc_token$ max(txKB_PS) as txKB_PS by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Thruput</title>
+        <search base="bandwidth_cdr">
+          <query>| timechart span=$tc_token$ max(thruput) as thruput by $host_token$</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>CPU Interrupts</title>
+        <search base="vmstat_cdr">
+          <query>| timechart span=1m max(cpu_interrupts) as cpu_interrupts fixedrange=f by ipaddress</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>waitThreads</title>
+        <search base="vmstat_cdr">
+          <query>| timechart span=1m max(waitThreads) as waitThreads fixedrange=f by ipaddress</query>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>vmstat cdr</title>
+        <search id="vmstat_cdr">
+          <query>index=linux sourcetype="vmstat" 
+| table _time FreeMBytes TotalMBytes UsedMBytes cpu_interrupts forks interrupts interrupts_PS loadAvg1mi mem memFreeMB memFreePct memTotalMB memUsedMB memUsedPct processes swapUsedPct swap_percent threads waitThreads wait_threads_count host
+| join type=left host
+[
+| inputlookup ghc-sysmon-lookup.csv
+| rename hostname as host 
+]
+| search $dc_token$
+| search $device_token$</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>cpu cdr</title>
+        <search id="cpu_cdr">
+          <query>index=linux sourcetype="cpu" CPU="all"
+| table _time host PercentIdleTime PercentNiceTime PercentSystemTime PercentUserTime PercentWaitTime cpu_load_percent cpu_user_percent
+| join type=left host
+[
+| inputlookup ghc-sysmon-lookup.csv
+| rename hostname as host 
+]
+| search $dc_token$
+| search $device_token$</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>bandwidth cdr</title>
+        <search id="bandwidth_cdr">
+          <query>index=linux sourcetype="bandwidth" bytes &gt; 0 Name=eth0
+| table _time host Name bytes packets thruput txKB_PS
+| join type=left host
+[
+| inputlookup ghc-sysmon-lookup.csv
+| rename hostname as host 
+]
+| search $dc_token$
+| search $device_token$</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>pg cdr</title>
+        <search id="pg_cdr">
+          <query>index="syslog-external" messages-added 
+| table _time host message-count messages-added
+| rename host as ipaddress
+| join type=left ipaddress
+[
+| inputlookup ghc-sysmon-lookup.csv
+| rename hostname as host 
+]
+| search $dc_token$
+| search $device_token$</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <search id="ms_cdr">
+          <query>index="syslog-external" flowDataChannel-mc
+| table _time host flowDataChannel-ma flowDataChannel-mc privateFlowEventChannel-ma privateFlowEventChannel-mc privateSipEventChannel-ma privateSipEventChannel-mc probeSipFlowDataChannel-ma probeSipFlowDataChannel-mc
+| rename host as ipaddress
+| join type=left ipaddress
+[
+| inputlookup ghc-sysmon-lookup.csv
+| rename hostname as host 
+]
+| search $dc_token$
+| search $device_token$</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>
