@@ -72,76 +72,6 @@ shortnames=t
   </row>
   <row>
     <panel>
-      <title>ngp_listing_look-up</title>
-      <table>
-        <title>PolicyGuru Number Search Results</title>
-        <search>
-          <query>| dbxquery
-connection=ngp_connection
-query="
-SELECT g.name , r.name AS RULE, l.value
-FROM master.listinggroup g 
-INNER JOIN master.listing l ON l.listinggroupid = g.id
-JOIN master.policyrule r ON g.id in (r.sourcelistinggroup_id, r.destinationlistinggroup_id)
-WHERE
-     l.value IN (SELECT CASE l.value
-     WHEN '^' THEN SUBSTR(l.value, STRPOS(l.value,'+'), (LENGTH(l.value)-STRPOS(l.value,'+')+1))
-     WHEN '+' THEN SUBSTR(l.value, 2,(LENGTH(l.value)-STRPOS(l.value,'2')+1))
-              ELSE l.value
-              END as value
-     FROM master.listing l
-     WHERE
-          l.value LIKE $num_search$);
-"
-shortnames=t
-| rename "name" AS LIST, "rule" AS RULE, "value" as NUMBER
-| table LIST RULE NUMBER</query>
-          <earliest>0</earliest>
-          <sampleRatio>1</sampleRatio>
-        </search>
-        <option name="count">20</option>
-        <option name="dataOverlayMode">none</option>
-        <option name="drilldown">cell</option>
-        <option name="percentagesRow">false</option>
-        <option name="rowNumbers">false</option>
-        <option name="totalsRow">false</option>
-        <option name="wrap">true</option>
-      </table>
-    </panel>
-  </row>
-  <row>
-    <panel>
-      <table>
-        <title>Listing Look-Up Against All Lists</title>
-        <search>
-          <query>| dbxquery
-connection=ngp_connection
-query="
-SELECT g.name , l.value
-FROM master.listinggroup g 
-     INNER JOIN master.listing l ON l.listinggroupid = g.id
-WHERE
-     l.value IN (SELECT CASE l.value
-     WHEN '^' THEN SUBSTR(l.value, STRPOS(l.value,'+'), (LENGTH(l.value)-STRPOS(l.value,'+')+1))
-     WHEN '+' THEN SUBSTR(l.value, 2,(LENGTH(l.value)-STRPOS(l.value,'2')+1))
-              ELSE l.value
-              END as value
-     FROM master.listing l
-     WHERE
-          l.value LIKE $num_search$);
-"
-shortnames=t
-| rename "name" AS LIST, "value" as NUMBER
-| table LIST NUMBER</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
-  </row>
-  <row>
-    <panel>
       <table>
         <title>Listing Lookup Array Result</title>
         <search>
@@ -169,6 +99,38 @@ GROUP BY value
 "
 shortnames=t
 | table value groups</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Listing Look-Up Against All Lists</title>
+        <search>
+          <query>| dbxquery
+connection=ngp_connection
+query="
+SELECT g.name , l.value
+FROM master.listinggroup g 
+     INNER JOIN master.listing l ON l.listinggroupid = g.id
+WHERE
+     l.value IN (SELECT CASE l.value
+     WHEN '^' THEN SUBSTR(l.value, STRPOS(l.value,'+'), (LENGTH(l.value)-STRPOS(l.value,'+')+1))
+     WHEN '+' THEN SUBSTR(l.value, 2,(LENGTH(l.value)-STRPOS(l.value,'2')+1))
+              ELSE l.value
+              END as value
+     FROM master.listing l
+     WHERE
+          l.value LIKE $num_search$);
+"
+shortnames=t
+| rename "name" AS LIST, "value" as NUMBER
+| table NUMBER LIST</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
