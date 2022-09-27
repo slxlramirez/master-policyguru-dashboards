@@ -8,9 +8,7 @@
       </search>
       <fieldForLabel>Name</fieldForLabel>
       <fieldForValue>Value</fieldForValue>
-      <choice value="ngp_connection">PolicyGuru</choice>
-      <default>ngp_connection</default>
-      <initialValue>ngp_connection</initialValue>
+      <choice value="policyguru">PolicyGuru</choice>
     </input>
     <input type="text" token="startDate_token">
       <label>Start Date (YYYY-MM-DD)</label>
@@ -136,7 +134,7 @@ FROM   master.policyflowdetails s
 WHERE  s.routername LIKE 'enum%' AND
        s.policydisposition = 2 AND
         s.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
-        s.analyticstime &gt;= (extract ('epoch' from timestamp '$endDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint
+        s.analyticstime &lt;= (extract ('epoch' from timestamp '$endDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint
 GROUP BY TO_CHAR(to_timestamp(s.analyticstime/1000),'YYYY-MM'), ruleid
 " shortnames=t 
 | table datekey ruleid calls
@@ -210,8 +208,8 @@ SELECT TO_CHAR(to_timestamp(a.analyticstime/1000),'YYYY-MM') as datekey,
        a.destinationnumber,
        a.routername
 FROM   master.flowstart a
-WHERE  a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
-       a.analyticstime &gt;= (extract ('epoch' from timestamp '$endDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
+WHERE  a.analyticstime &gt;= (extract ('epoch' from timestamp '2022-08-01' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
+       a.analyticstime &lt;= (extract ('epoch' from timestamp '2022-09-01' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
        a.routername LIKE 'enum%' AND
        a.direction = 1 AND
        a.sourcenumber IN
@@ -225,26 +223,25 @@ WHERE  a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$
        )
 ) foo LEFT OUTER JOIN 
 (
-SELECT s.guid, s.policydisposition
-FROM   master.policyflowdetails s
-WHERE  s.guid IN
+SELECT pfd.guid, pfd.policydisposition
+FROM   master.policyflowdetails pfd
+WHERE  pfd.guid IN
 (
 SELECT a.guid
 FROM   master.flowstart a
 WHERE  a.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
-       a.analyticstime &gt;= (extract ('epoch' from timestamp '$endDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
+       a.analyticstime &lt;= (extract ('epoch' from timestamp '$endDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
        a.routername LIKE 'enum%' AND
        a.direction = 1 AND
        a.sourcenumber IN
        (
-       SELECT     CASE LEFT(a.value, 1)
-         WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
-           ELSE a.value
-         END as value
-       FROM         MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
-       WHERE    b.name LIKE '%HCL%'
+       SELECT  value
+       FROM    MASTER.LISTING x INNER JOIN master.listinggroup y ON x.listinggroupid=y.id
+       WHERE   y.name LIKE '%HCL%'
        )
-) 
+) AND
+      pfd.analyticstime &gt;= (extract ('epoch' from timestamp '$startDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint AND
+      pfd.analyticstime &lt;= (extract ('epoch' from timestamp '$endDate_token$' AT TIME ZONE 'CST6CDT' AT TIME ZONE 'GMT') * 1000)::bigint
 ) bar ON foo.guid=bar.guid
 ) viz
 GROUP BY viz.datekey,
@@ -252,7 +249,7 @@ GROUP BY viz.datekey,
          viz.policydisposition
 " 
          shortnames=t
-| table *</query>
+| table datekey sourcenumber policydisposition calls</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
