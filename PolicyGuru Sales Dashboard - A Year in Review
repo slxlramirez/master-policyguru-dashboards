@@ -16,12 +16,12 @@
       <table>
         <title>Firewall Rules</title>
         <search id="fw_rules">
-          <query>| dbxquery
+          <query>| dbxquery 
 connection=$dataSource_token$
 maxrows=250000
-timeout=1800
+timeout=1800 
 query="
-SELECT
+SELECT 
        t.*, u.value as dst_value
 FROM
 (
@@ -44,7 +44,7 @@ SELECT CASE a.action
        a.id,
        a.name,
        sourcelistinggroup_id,
-       b.name as src_name,
+       b.name as src_name, 
        c.name as dst_name
 from ((master.policyrule a LEFT OUTER JOIN master.listinggroup b ON a.sourcelistinggroup_id=b.id)
        LEFT OUTER JOIN master.listinggroup c ON a.destinationlistinggroup_id=c.id)
@@ -61,7 +61,7 @@ FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.
 " shortnames=t
 | table id name sourcelistinggroup_id src_name src_value destinationlistinggroup_id dst_name dst_value direction action actioninfo starttime endtime updatedtime
 | table name src_name src_value dst_name dst_value direction action actioninfo
-| sort 0 name
+| sort 0 name 
 | stats count by name direction src_name dst_name action actioninfo
 | table name direction action</query>
           <earliest>-24h@h</earliest>
@@ -75,7 +75,7 @@ FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.
       <table>
         <title>IPS Rules</title>
         <search id="ips_rules">
-          <query>index="scheduler" "PolicyGuru Alert*"
+          <query>index="scheduler" "PolicyGuru Alert*" 
 | table _time savedsearch_name run_time
 | stats count by savedsearch_name
 | fields - count
@@ -118,8 +118,8 @@ FROM    master.listing a INNER JOIN master.listinggroup b ON a.listinggroupid=b.
       <table>
         <title>FW HITS BY MONTH</title>
         <search id="fw_hits">
-          <query>| dbxquery
-connection="ngp_connection"
+          <query>| dbxquery 
+connection="ngp_connection" 
 query="
 SELECT TO_CHAR(to_timestamp(s.analyticstime/1000),'YYYY-MM') as datekey,
        ruleid,
@@ -130,7 +130,7 @@ WHERE  s.routername LIKE 'enum%' AND
        s.analyticstime &gt;= (extract  ('epoch' from (date_trunc('month', current_date) - interval '13 month')::timestamp) * 1000)::bigint AND
        s.analyticstime  &lt; (extract  ('epoch' from (date_trunc('month', current_date)                      )::timestamp) * 1000)::bigint
 GROUP BY TO_CHAR(to_timestamp(s.analyticstime/1000),'YYYY-MM'), ruleid
-" shortnames=t
+" shortnames=t 
 | table datekey ruleid calls
 | sort  datekey</query>
           <earliest>-15m</earliest>
@@ -146,91 +146,21 @@ GROUP BY TO_CHAR(to_timestamp(s.analyticstime/1000),'YYYY-MM'), ruleid
       <table>
         <title>NVCL Allowed Calls</title>
         <search base="nvcl_calls">
-          <query>| search TERM_STATUS="ALLOWED"
-| stats SUM(CALLS) as CALLS by DATEKEY
-| sort DATEKEY</query>
+          <query>| search policydisposition="ALLOWED"
+| stats SUM(calls) as calls by datekey
+| sort datekey</query>
         </search>
         <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
       </table>
     </panel>
     <panel>
       <table>
         <title>NVCL Terminated Calls</title>
         <search base="nvcl_calls">
-          <query>| search TERM_STATUS="TERMINATED"
-| stats SUM(CALLS) as CALLS by DATEKEY
-| sort DATEKEY</query>
-        </search>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
-  </row>
-  <row>
-    <panel>
-      <table>
-        <title>NVCL Calls</title>
-        <search id="nvcl_calls">
-          <query>| dbxquery
-timeout=1800
-maxrows=500000
-connection=$dataSource_token$
-query="
-SELECT  TO_CHAR(c.START_TIME,'YYYY-MM') as datekey,
-        SOURCE,
-        CASE
-             WHEN x.DISPOSITION = 0 THEN 'TERMINATED'
-             WHEN x.DISPOSITION = 1 THEN 'TERMINATED'
-             WHEN x.DISPOSITION = 2 THEN 'TERMINATED'
-             ELSE 'ALLOWED'
-        END as term_status,
-        COUNT(c.call_oid) as CALLS
-FROM    CALL c LEFT OUTER JOIN terminations x ON c.call_oid=x.call_oid
-WHERE   c.START_TIME &gt;= add_months(trunc(sysdate, 'month'), - 12)  AND
-        c.START_TIME  &lt; add_months(trunc(sysdate, 'month'), - 0 )  AND
-        c.DIRECTION = 0 AND
-        c.SOURCE IN
-        (
-          SELECT  CONCAT(CONCAT(CONCAT(CONCAT(CONCAT(CONCAT('[',dl.country_code),']'),'('),dl.area_code),')'),dl.local_num) as directory_number
-          FROM    DIR_LISTING dl
-          WHERE   FIRST_NAME LIKE '%HCL%'
-        )
-GROUP BY TO_CHAR(c.START_TIME,'YYYY-MM'),
-         SOURCE,
-         CASE
-             WHEN x.DISPOSITION = 0 THEN 'TERMINATED'
-             WHEN x.DISPOSITION = 1 THEN 'TERMINATED'
-             WHEN x.DISPOSITION = 2 THEN 'TERMINATED'
-             ELSE 'ALLOWED'
-         END
-ORDER BY TO_CHAR(c.START_TIME,'YYYY-MM'), COUNT(c.call_oid) DESC
-"
-shortnames=t
-| table DATEKEY SOURCE TERM_STATUS CALLS</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
-        </search>
-        <option name="drilldown">none</option>
-      </table>
-    </panel>
-  </row>
-  <row>
-    <panel>
-      <table>
-        <title>Pending Scheduled Reports</title>
-        <search>
-          <query>| dbxquery
-timeout=1800
-maxrows=100
-connection=$dataSource_token$
-query="
-SELECT  b.NAME, a.LAST_RUN_TIME
-FROM    SCH_RPT a LEFT OUTER JOIN REPORT_OBJECT b ON a.REPORT_OID=b.OID
-WHERE   STATUS=2
-"
-shortnames=t
-| table NAME LAST_RUN_TIME</query>
-          <earliest>-24h@h</earliest>
-          <latest>now</latest>
+          <query>| search policydisposition="TERMINATED"
+| stats SUM(calls) as calls by datekey
+| sort datekey</query>
         </search>
         <option name="drilldown">none</option>
         <option name="refresh.display">progressbar</option>
@@ -240,135 +170,84 @@ shortnames=t
   <row>
     <panel>
       <table>
-        <title>Redirection Plans</title>
-        <search>
-          <query>| dbxquery
+        <title>NVCL Calls</title>
+        <search id="nvcl_calls">
+          <query>| dbxquery 
 connection=$dataSource_token$
+maxrows=250000
+timeout=1800 
 query="
-SELECT NAME||' (UTA)' as REDIRECTION_PLAN,
-       COUNT(distinct RULE_NUM_B) RULES
+SELECT viz.datekey,
+       viz.sourcenumber,
+       viz.policydisposition,
+       count(viz.datekey) as calls
 FROM
 (
-SELECT a.NAME,
-       a.COMMENTS,
-       a.VERSION,
-       b.OBJECT_SUBTYPE,
-       b.OBJECT_TYPE,
-       b.RULE_OBJ_OID,
-       CASE b.DATA_TYPE
-         WHEN 1 THEN 'SOURCE'
-         WHEN 2 THEN 'DESTINATION'
-         ELSE 'OTHER'
-       END as DATA_TYPE,
-       b.RULE_NUM as RULE_NUM_B,
-       c.RULE_NUM as RULE_NUM_C,
-       CASE c.DIRECTION
-         WHEN 0 THEN 'ANY'
-         WHEN 1 THEN 'INBOUND'
-         WHEN 2 THEN 'OUTBOUND'
-         ELSE 'OTHER'
-       END as DIRECTION,
-       CASE c.ACTION
-         WHEN 0 THEN 'MASKING'
-         WHEN 1 THEN 'REDIRECTION'
-         ELSE 'OTHER'
-       END as ACTION,
-       c.SRC_REPLACE,
-       c.SRC_DISPLAY_REPLACE,
-       c.DEST_REPLACE
-FROM    ((UTA_MASK_PLAN a LEFT OUTER JOIN UTA_MASK_RULE_DATA b ON a.OID=b.PLAN_OID)
-                          LEFT OUTER JOIN UTA_MASK_RULES c ON b.PLAN_OID=b.PLAN_OID AND b.RULE_NUM=c.RULE_NUM)
-WHERE  c.ACTION=1
-) foo
-GROUP BY NAME
-"
-shortnames=t
-| append
-[
-| dbxquery
-connection=$dataSource_token$
-query="
-SELECT NAME||' (SIP)' as REDIRECTION_PLAN,
-       COUNT(distinct RULE_NUM_B) RULES
+SELECT foo.*, 
+       CASE bar.policydisposition
+         WHEN 0 THEN 'UNKNOWN'
+         WHEN 1 THEN 'ALLOWED'
+         WHEN 2 THEN 'TERMINATED'
+         WHEN 3 THEN 'REDIRECTED'
+         WHEN 4 THEN 'TRANSFERRED'
+         WHEN 5 THEN 'UNANSWERED'
+         WHEN 6 THEN 'EXPIRED'
+         ELSE bar.policydisposition::varchar
+       END as policydisposition
 FROM
 (
-SELECT a.NAME,
-       a.COMMENTS,
-       a.VERSION,
-       b.OBJECT_SUBTYPE,
-       b.OBJECT_TYPE,
-       b.RULE_OBJ_OID,
-       CASE b.DATA_TYPE
-         WHEN 1 THEN 'SOURCE'
-         WHEN 2 THEN 'DESTINATION'
-         ELSE 'OTHER'
-       END as DATA_TYPE,
-       b.RULE_NUM as RULE_NUM_B,
-       c.RULE_NUM as RULE_NUM_C,
-       CASE c.DIRECTION
-         WHEN 0 THEN 'ANY'
-         WHEN 1 THEN 'INBOUND'
-         WHEN 2 THEN 'OUTBOUND'
-         ELSE 'OTHER'
-       END as DIRECTION,
-       CASE c.ACTION
-         WHEN 0 THEN 'MASKING'
-         WHEN 1 THEN 'REDIRECTION'
-         ELSE 'OTHER'
-       END as ACTION,
-       c.SRC_REPLACE,
-       c.SRC_DISPLAY_REPLACE,
-       c.DEST_REPLACE
-FROM    ((SIP_MASK_PLAN a LEFT OUTER JOIN SIP_MASK_RULE_DATA b ON a.OID=b.PLAN_OID)
-                          LEFT OUTER JOIN SIP_MASK_RULES c ON b.PLAN_OID=b.PLAN_OID AND b.RULE_NUM=c.RULE_NUM)
-WHERE  c.ACTION=1
-) foo
-GROUP BY NAME
-"
-shortnames=t
-]
-| append
-[
-| dbxquery
-connection=$dataSource_token$
-query="
-SELECT NAME||' (PRI)' as REDIRECTION_PLAN,
-       COUNT(distinct RULE_NUM_B) RULES
-FROM
+SELECT TO_CHAR(to_timestamp(a.analyticstime/1000),'YYYY-MM') as datekey,
+       a.guid,
+       a.sourcenumber,
+       a.destinationnumber,
+       a.routername
+FROM   master.flowstart a
+WHERE  a.analyticstime &gt;= (extract  ('epoch' from (date_trunc('month', current_date) - interval '13 month')::timestamp) * 1000)::bigint AND
+       a.routername LIKE 'enum%' AND
+       a.direction = 1 AND
+       a.sourcenumber IN
+       (
+       SELECT     CASE LEFT(a.value, 1)
+         WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+           ELSE a.value
+         END as value
+       FROM         MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+       WHERE    b.name LIKE '%HCL%'
+       )
+) foo LEFT OUTER JOIN 
 (
-SELECT a.NAME,
-       a.COMMENTS,
-       a.VERSION,
-       b.OBJECT_SUBTYPE,
-       b.OBJECT_TYPE,
-       b.RULE_OBJ_OID,
-       CASE b.DATA_TYPE
-         WHEN 1 THEN 'SOURCE'
-         WHEN 2 THEN 'DESTINATION'
-         ELSE 'OTHER'
-       END as DATA_TYPE,
-       b.RULE_NUM as RULE_NUM_B,
-       c.RULE_NUM as RULE_NUM_C,
-       CASE c.DIRECTION
-         WHEN 0 THEN 'ANY'
-         WHEN 1 THEN 'INBOUND'
-         WHEN 2 THEN 'OUTBOUND'
-         ELSE 'OTHER'
-       END as DIRECTION,
-       c.SRC_REPLACE,
-       c.DEST_REPLACE
-FROM    ((MASK_PLAN a LEFT OUTER JOIN MASK_RULE_DATA b ON a.OID=b.PLAN_OID)
-                          LEFT OUTER JOIN MASK_RULES c ON b.PLAN_OID=b.PLAN_OID AND b.RULE_NUM=c.RULE_NUM)
-WHERE  c.DIRECTION=1
-) foo
-GROUP BY NAME
-"
-shortnames=t
-]</query>
+SELECT s.guid, s.policydisposition
+FROM   master.policyflowdetails s
+WHERE  s.guid IN
+(
+SELECT a.guid
+FROM   master.flowstart a
+WHERE  a.analyticstime &gt;= (extract  ('epoch' from (date_trunc('month', current_date) - interval '13 month')::timestamp) * 1000)::bigint AND
+       a.routername LIKE 'enum%' AND
+       a.direction = 1 AND
+       a.sourcenumber IN
+       (
+       SELECT     CASE LEFT(a.value, 1)
+         WHEN '^' THEN SUBSTR(a.value, STRPOS(a.value,'+'), (LENGTH(a.value)-STRPOS(a.value,'+')+1))
+           ELSE a.value
+         END as value
+       FROM         MASTER.LISTING a INNER JOIN master.listinggroup b ON a.listinggroupid=b.id
+       WHERE    b.name LIKE '%HCL%'
+       )
+) 
+) bar ON foo.guid=bar.guid
+) viz
+GROUP BY viz.datekey,
+         viz.sourcenumber,
+         viz.policydisposition
+" 
+         shortnames=t
+| table *</query>
           <earliest>-24h@h</earliest>
           <latest>now</latest>
         </search>
         <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
       </table>
     </panel>
   </row>
