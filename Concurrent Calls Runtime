@@ -1,0 +1,31 @@
+<form>
+  <label>Concurrent Calls Runtime</label>
+  <fieldset submitButton="true">
+    <input type="time" token="field1">
+      <label></label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>Runtime</title>
+        <search>
+          <query>index="scheduler" (savedsearch_name="Concurrent Calls (ADS)" OR savedsearch_name="Concurrent Calls Checker Transpose v2" OR savedsearch_name="Concurrent Calls Checker Transpose")
+| table _time savedsearch_name status run_time
+| timechart max(run_time) by savedsearch_name</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</form>
