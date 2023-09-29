@@ -1,0 +1,72 @@
+<form>
+  <label>Concurrent Calls Analysis</label>
+  <fieldset submitButton="true">
+    <input type="time" token="field1">
+      <label></label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <chart>
+        <title>PG AGG STATS IDX</title>
+        <search>
+          <query>index=pg_agg_stats 
+| timechart span=15m max(flowstart_calls_with_no_flowend) as flowstart_cc max(flowconnect_calls_with_no_flowend) as flowconnect_cc max(max_cps) as max_cps</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY2.text">MAX CPS</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.overlayFields">max_cps</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>PG CPS IDX (PG DIRECT SQL Data)</title>
+        <search>
+          <query>index=pg_cps app="pg_query"
+| timechart span=15m max(flowconnect_calls_with_no_flowend) as flowconnect_cc max(max_cps) as max_cps</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.overlayFields">max_cps</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>PG CPS IDX (ADS Data)</title>
+        <search>
+          <query>index=pg_cps app="ads"
+| timechart span=15m max(flowconnect_calls_with_no_flowend) as flowconnect_cc max(max_cps) as max_cps</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY2.text">MAX CPS</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.overlayFields">max_cps</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">bottom</option>
+      </chart>
+    </panel>
+  </row>
+</form>
